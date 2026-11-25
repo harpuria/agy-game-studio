@@ -112,7 +112,8 @@ agy plugin install https://github.com/harpuria/agy-game-studio
 
 Antigravity 대화에서 `/game-dev-studio`를 입력하면 **Game Dev Studio** 사이드 패널(`sidecar://agy-game-studio/studio/playtest`)이 열립니다. 대화 오른쪽 위의 **⋮ → Extensions → Game Dev Studio**로도 열 수 있습니다.
 
-- **Phaser 게임 연결**: 게임 루트에서 `node /path/to/agy-game-studio/scripts/playtest-phaser.mjs`를 실행하고, 터미널에 표시된 로컬 주소를 패널에 입력한 뒤 **▶ Connect to game**을 누릅니다. 자세한 절차는 [Playtest 확장](#game-dev-studio-playtest-확장-sidecarsstudio)을 참고하세요.
+- **Phaser 게임 실행**: 게임 폴더에서 `npm ci`를 한 번 실행한 뒤, 패널의 **▶ Run game**을 누르면 게임이 실행되고 패널에 바로 연결됩니다. 자세한 절차는 [Playtest 확장](#game-dev-studio-playtest-확장-sidecarsstudio)을 참고하세요.
+- **설치 확인용 예제**: 저장소에 든 [`examples/phaser-demo`](examples/phaser-demo/README.md)에서 `npm ci`를 실행하고, 패널의 **Game folder**에 그 경로를 넣어 **Run game**을 누르면 게임 템플릿 없이도 패널을 바로 써 볼 수 있습니다.
 
 `./scripts/check_env.sh [studio|mcp|phaser|godot]`로 언제든 환경을 확인할 수 있습니다(`--help`로 사용법 확인).
 
@@ -163,12 +164,14 @@ flowchart TD
 
 `/game-dev-studio`, `[Game Dev Studio](sidecar://agy-game-studio/studio/playtest)`, 또는 **⋮ → Extensions → Game Dev Studio**로 오른쪽 보조 패널에서 **Game Dev Studio**를 엽니다. Playtest 패널은 **Phaser Web** 게임을 대상으로 합니다. Godot 게임은 템플릿의 네이티브 실행과 테스트 경로로 검증합니다.
 
-- **Phaser 게임 연결**: Phaser 게임 루트에서 `npm ci`로 의존성을 설치한 뒤 `node /path/to/agy-game-studio/scripts/playtest-phaser.mjs`를 실행합니다(경로는 플러그인의 실제 설치 경로로 바꿉니다). 이 스크립트는 게임 자체의 Vite 설정을 standalone 모드로 띄우면서 캡처 브리지 스크립트(`server/services/phaser-bridge.js`)를 주입합니다. 터미널에 출력된 로컬 주소를 패널에 입력하고 **▶ Connect to game**을 누릅니다.
+- **원클릭 실행**: Phaser 게임 폴더에서 `npm ci`로 의존성을 한 번 설치합니다. 패널의 **Game folder**에는 현재 워크스페이스가 미리 채워지며, 워크스페이스 바로 아래 폴더에 Phaser 게임이 하나만 있으면 그 폴더를 자동으로 찾습니다. **▶ Run game**(또는 헤더의 **🚀 Run**)을 누르면 사이드카가 `scripts/playtest-phaser.mjs`를 실행해 게임 자체의 Vite 설정을 standalone 모드로 띄우고, 캡처 브리지(`server/services/phaser-bridge.js`)를 주입한 뒤 패널을 연결합니다.
+- **실행 실패 보고**: 의존성이 없거나 Vite가 시작하지 못하면 오류 카드에 원인과 서버 출력이 표시되고, **🚨 Send Game Error to Chat**으로 그대로 대화에 보낼 수 있습니다.
+- **직접 띄운 서버에 연결**: 터미널에서 `node /path/to/agy-game-studio/scripts/playtest-phaser.mjs`를 직접 실행했다면 **Connect to a server you started yourself**를 펼쳐 출력된 주소를 넣습니다.
 - **10초 DVR 링 버퍼**: 게임 화면의 최근 **10초(25 FPS 기준 250 프레임)**를 계속 기록합니다.
 - **일시정지, 탐색, 주석 (`F8` 또는 `` ` ``)**: 게임을 멈추고 10초 DVR 타임라인을 프레임 단위로 탐색하며, 시각적 버그 위에 박스·화살표·메모를 그린 뒤 다음 중 하나를 현재 대화에 보냅니다.
   - **📸 Frame**: 주석이 포함된 PNG 스크린샷과 게임 콘솔 로그
   - **🎞️ 10s GIF**: 게임 화면 해상도에 맞춘 최근 10초 분량의 애니메이션 GIF와 게임 콘솔 로그
-- 테스트가 끝나면 시작한 Vite 프로세스를 종료합니다.
+- **종료**: 헤더 왼쪽의 🕹️ 버튼을 누르면 Run 화면으로 돌아가면서 패널이 띄운 게임 서버도 종료됩니다. 플러그인을 끄거나 Antigravity를 닫아도 함께 종료됩니다.
 
 ![10초 DVR 되감기 탐색이 가능한 일시정지·주석 모드 (원본 버전 화면)](assets/playtest-studio-annotate.png)
 
@@ -262,7 +265,14 @@ npm test
 
 `npm run build`는 TypeScript 소스(`src/`)를 타입 검사하고 Vite로 독립 실행형 프론트엔드 번들(`dist/index.html`, `dist/app.js`, `dist/styles.css`)을 만듭니다. 커밋된 `dist/` 폴더는 외부 `node_modules` 없이 동작합니다.
 
-Phaser 템플릿 데모와 Studio가 실행 중이라면, 게임 루트에서 `node /path/to/agy-game-studio/tests/phaser-playtest-smoke.mjs <studio-url> <game-url>`로 실제 게임 연결, 일시정지, 주석, PNG·GIF 전송을 점검할 수 있습니다. 이 스크립트는 게임의 Playwright를 사용하므로 Chromium 브라우저를 설치하거나 `CHROMIUM_PATH`로 로컬 실행 파일을 지정합니다.
+패널 전체 흐름(Run → 게임 프레임 수신 → 일시정지 → 주석 → PNG·GIF 전송 → 종료)은 번들 예제로 점검합니다. Studio 서버를 직접 띄우고 실제 대화로는 아무것도 보내지 않습니다.
+
+```bash
+(cd examples/phaser-demo && npm ci)
+node tests/phaser-playtest-smoke.mjs
+```
+
+다른 게임은 `--game <게임 폴더 또는 playtest URL>`, 이미 실행 중인 Studio는 `--studio <url>`로 지정합니다. Playwright가 필요하며, Chromium 경로는 `CHROMIUM_PATH`로 바꿀 수 있습니다.
 
 ### 3. 심볼릭 링크를 통한 디버깅과 리로드
 

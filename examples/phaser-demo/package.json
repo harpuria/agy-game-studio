@@ -1,0 +1,17 @@
+{
+  "name": "phaser-playtest-demo",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Minimal Phaser game for trying the Game Dev Studio Playtest panel.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "phaser": "4.2.1"
+  },
+  "devDependencies": {
+    "vite": "6.4.6"
+  }
+}

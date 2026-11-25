@@ -40,15 +40,11 @@ The user can also open the panel with `/game-dev-studio` or **⋮ → Extensions
 ## Connect a Phaser game
 
 1. **Prepare the game**: In the Phaser game root, activate the Node version from `.nvmrc` (Node `22.12+`) and run `npm ci` if `node_modules/` is missing or stale.
-2. **Start the capture server**: Keep the game root as the working directory and run the plugin's launcher with its absolute install path:
+2. **Run it from the panel**: Surface the pill and ask the user to press **▶ Run game**. The **Game folder** field starts with the workspace; if the game is not the workspace root or its only direct subfolder with a `phaser` dependency, tell the user which folder to enter. The sidecar starts `scripts/playtest-phaser.mjs` (the game's own Vite config in `standalone` mode on `127.0.0.1`, with the capture bridge `server/services/phaser-bridge.js` injected) and connects once the first frame arrives. Do not start a separate Vite server yourself for this.
+3. **Launch failures** arrive through **🚨 Send Game Error to Chat** with the server output. Fix the cause (usually `npm ci`, a wrong folder, or a Vite config error) and ask the user to press **Try again**.
+4. **Stopping**: The 🕹️ button in the panel header returns to the Run card and stops the game server. It also stops when the plugin is disabled or Antigravity quits.
 
-   ```bash
-   node /path/to/agy-game-studio/scripts/playtest-phaser.mjs
-   ```
-
-   The script loads the game's own Vite config in `standalone` mode, binds to `127.0.0.1`, and injects the capture bridge (`server/services/phaser-bridge.js`) into `index.html`. It fails fast if `package.json` has no `phaser` dependency. Run it as a long-running background process and read the printed local URL and port.
-3. **Connect the panel**: Surface the pill, ask the user to paste the printed URL into the panel, and click **▶ Connect to game**. Gameplay is live once the first frame arrives.
-4. **Stop the server** when playtesting ends. Do not leave the Vite process running across tasks.
+**Manual fallback**: If the user prefers a terminal, run `node /path/to/agy-game-studio/scripts/playtest-phaser.mjs` from the game root as a background process, then have them expand **Connect to a server you started yourself** and paste the printed URL. Stop that process when playtesting ends.
 
 ---
 
@@ -71,13 +67,14 @@ When a report arrives:
 
 ## Automated smoke test (plugin contributors)
 
-With the Phaser template demo and Studio both running, verify connection, pause, annotation, PNG, and GIF delivery from the game root:
+From the plugin root, verify Run, frames, pause, annotation, PNG and GIF delivery, and stopping against the bundled demo:
 
 ```bash
-node /path/to/agy-game-studio/tests/phaser-playtest-smoke.mjs <studio-url> <game-url>
+(cd examples/phaser-demo && npm ci)
+node tests/phaser-playtest-smoke.mjs
 ```
 
-The script uses the game's Playwright installation and intercepts outgoing reports locally. Install its Chromium browser or set `CHROMIUM_PATH` to a local executable.
+Pass `--game <folder or URL>` for another game or `--studio <url>` for a running Studio. Reports are intercepted locally. It needs Playwright; set `CHROMIUM_PATH` to use another Chromium.
 
 ---
 
@@ -85,7 +82,9 @@ The script uses the game's Playwright installation and intercepts outgoing repor
 
 | Symptom | Fix |
 | :--- | :--- |
-| `Run from the Phaser game directory after npm ci.` | Change to the game root (the folder with the `phaser` dependency) and run `npm ci`. |
-| Panel stays black after **Connect to game** | Check the URL and port printed by the launcher, confirm the Vite process is still running, and reload the panel. |
+| `Dependencies are not installed in …` | Run `npm ci` in that game folder, then **Try again**. |
+| `No Phaser game found` / `Several Phaser games found` | Enter the folder whose `package.json` depends on `phaser` in **Game folder**. |
+| `The game server exited before it was ready` | Read the server output in the error card (often a Vite config or syntax error), fix it, then **Try again**. |
+| Panel stays black after **Run game** | Confirm the game draws to a `<canvas>` and reload the panel. For a manual server, check the printed URL and that the process is still running. |
 | Panel does not open | Confirm **Game Dev Studio** is enabled in **Customizations → Installed**, then check `~/.gemini/antigravity/sidecar_data/agy-game-studio/studio/logs/sidecar.log`. |
 | Keys do not reach the game | Click inside the game view so it has focus. While paused, `F8` and `` ` `` are captured by the panel. |
