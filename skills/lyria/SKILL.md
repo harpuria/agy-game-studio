@@ -83,7 +83,7 @@ Consult the reference cards in `references/` for model limits, timing controls, 
   "tool": "music_generate",
   "arguments": {
     "prompt": "Atmospheric synthwave exploration theme at 110 BPM in D minor with warm analog pads and clean low-end. Instrumental only, no vocals.",
-    "outPath": "assets/music/stage_theme.wav",
+    "outPath": "<GAME_ROOT>/public/assets/audio/stage_theme.wav",
     "model": "lyria-3.5",
     "format": "wav",
     "apiMode": "interactions",
@@ -101,9 +101,9 @@ Consult the reference cards in `references/` for model limits, timing controls, 
   "tool": "music_generate",
   "arguments": {
     "prompt": "An energetic indie rock title theme with driving drums and soaring vocals at 128 BPM in G Major",
-    "outPath": "assets/music/title_anthem.mp3",
+    "outPath": "<GAME_ROOT>/public/assets/audio/title_anthem.mp3",
     "model": "lyria-3.5",
-    "outLyricsPath": "assets/music/title_anthem_lyrics.txt"
+    "outLyricsPath": "<GAME_ROOT>/art/music/title_anthem_lyrics.txt"
   }
 }
 ```
@@ -115,7 +115,7 @@ Consult the reference cards in `references/` for model limits, timing controls, 
   "tool": "music_generate",
   "arguments": {
     "prompt": "An energetic 8-bit chiptune arcade melody at 140 BPM in C major. Instrumental only, no vocals.",
-    "outPath": "assets/music/chiptune_proto.mp3",
+    "outPath": "<GAME_ROOT>/public/assets/audio/chiptune_proto.mp3",
     "model": "lyria-3-clip-preview"
   }
 }
@@ -128,8 +128,8 @@ Consult the reference cards in `references/` for model limits, timing controls, 
   "tool": "music_generate",
   "arguments": {
     "prompt": "Ambient relaxing soundscape matching the mood of this landscape. Instrumental only, no vocals.",
-    "inputImages": ["assets/art/concept_landscape.png"],
-    "outPath": "assets/music/landscape_theme.mp3",
+    "inputImages": ["<GAME_ROOT>/art/concept_landscape.png"],
+    "outPath": "<GAME_ROOT>/public/assets/audio/landscape_theme.mp3",
     "model": "lyria-3-pro-preview"
   }
 }
@@ -137,9 +137,11 @@ Consult the reference cards in `references/` for model limits, timing controls, 
 
 ---
 
-## Import into the game
+## Paths and import into the game
 
-Choose output paths in the game's asset directory. For Phaser, follow [phaser-web](../phaser-web/SKILL.md) and register the exported file in the game's preload list. For Godot, follow [godot-game](../godot-game/SKILL.md) and confirm the imported resource in the target scene.
+Every path passed to `music_generate` must be absolute; the tool rejects relative paths. In the examples, replace `<GAME_ROOT>` with the game repository's absolute root. Files the game loads go under `public/assets/audio/` (Phaser) or `game/assets/audio/` (Godot); lyrics and reference images go under `<GAME_ROOT>/art/` so they never ship. See the folder layout in [vibe-game-developer](../vibe-game-developer/SKILL.md#asset-folders-and-paths) Start from the track's row in the GDD *Asset manifest* and set its status to `generated` once the file is written and checked.
+
+For Phaser, follow [phaser-web](../phaser-web/SKILL.md) and register the exported file in the game's preload list. For Godot, follow [godot-game](../godot-game/SKILL.md) and confirm the imported resource in the target scene.
 
 
 ## Prompting best practices

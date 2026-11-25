@@ -25,7 +25,7 @@
 
 ## 사용자 설치 (User-Level Installation)
 
-`agy-game-studio`는 미리 빌드된 UI 에셋(`dist/`)을 포함하고 있으며, Antigravity에 내장된 Node.js 런타임과 `sidecar_sdk`를 사용합니다. 사용자로 설치할 때는 **`npm install`이 필요 없고**, **프론트엔드 빌드 단계도 없으며**, **Python이나 `uv`도 설치하지 않습니다**. 번들된 Go MCP 서버(`mcp/`)를 필요할 때 빌드하기 위한 Go 툴체인(`1.26` 이상)만 있으면 됩니다.
+`agy-game-studio`는 미리 빌드된 UI 에셋(`dist/`)을 포함하고 있으며, Antigravity에 내장된 Node.js 런타임과 `sidecar_sdk`를 사용합니다. 사용자로 설치할 때는 **`npm install`이 필요 없고**, **프론트엔드 빌드 단계도 없으며**, **Python이나 `uv`도 설치하지 않습니다**. 번들된 Go MCP 서버(`mcp/`)를 처음 한 번 빌드하기 위한 Go 툴체인(`1.26` 이상)만 있으면 됩니다. 빌드 결과는 `~/Library/Caches/agy-game-studio/mcp/`에 저장되어, 이후에는 `mcp/` 소스가 바뀔 때만 다시 빌드합니다.
 
 게임 자체를 실행하는 데 필요한 도구는 템플릿마다 다릅니다.
 
@@ -112,7 +112,8 @@ agy plugin install https://github.com/harpuria/agy-game-studio
 
 Antigravity 대화에서 `/game-dev-studio`를 입력하면 **Game Dev Studio** 사이드 패널(`sidecar://agy-game-studio/studio/playtest`)이 열립니다. 대화 오른쪽 위의 **⋮ → Extensions → Game Dev Studio**로도 열 수 있습니다.
 
-- **Phaser 게임 연결**: 게임 루트에서 `node /path/to/agy-game-studio/scripts/playtest-phaser.mjs`를 실행하고, 터미널에 표시된 로컬 주소를 패널에 입력한 뒤 **▶ Connect to game**을 누릅니다. 자세한 절차는 [Playtest 확장](#game-dev-studio-playtest-확장-sidecarsstudio)을 참고하세요.
+- **Phaser 게임 실행**: 게임 폴더에서 `npm ci`를 한 번 실행한 뒤, 패널의 **▶ Run game**을 누르면 게임이 실행되고 패널에 바로 연결됩니다. 자세한 절차는 [Playtest 확장](#game-dev-studio-playtest-확장-sidecarsstudio)을 참고하세요.
+- **설치 확인용 예제**: 저장소에 든 [`examples/phaser-demo`](examples/phaser-demo/README.md)에서 `npm ci`를 실행하고, 패널의 **Game folder**에 그 경로를 넣어 **Run game**을 누르면 게임 템플릿 없이도 패널을 바로 써 볼 수 있습니다.
 
 `./scripts/check_env.sh [studio|mcp|phaser|godot]`로 언제든 환경을 확인할 수 있습니다(`--help`로 사용법 확인).
 
@@ -138,9 +139,9 @@ flowchart TD
 ```
 
 1. **템플릿을 선택하고 라우터로 시작합니다 (`vibe-game-developer`).** 브라우저 게임은 Phaser Web, Android·iOS 게임은 Godot Mobile, 데스크톱 게임은 Godot PC로 시작합니다. ([지원하는 게임 템플릿](#지원하는-게임-템플릿))
-2. **첫 장면의 목표를 정합니다 (`game-design`).** 채팅에 `/vibe-game-developer Phaser로 30초 동안 별을 모으는 게임을 만들고 싶어. 이동 조작과 한 판이 끝나는 조건부터 정리해 줘.`처럼 요청합니다. 합의한 규칙은 Phaser의 `docs/game/GDD.md`, Godot의 `docs/GDD.md`에 기록합니다.
+2. **첫 장면의 목표를 정합니다 (`game-design`).** 채팅에 `/vibe-game-developer Phaser로 30초 동안 별을 모으는 게임을 만들고 싶어. 이동 조작과 한 판이 끝나는 조건부터 정리해 줘.`처럼 요청합니다. 합의한 규칙은 Phaser의 `docs/game/GDD.md`, Godot의 `docs/GDD.md`에 기록합니다. 이때 첫 플레이 가능 버전에 필요한 에셋을 GDD의 **에셋 목록(Asset manifest)** 표에 한 줄씩 적고, AI 이미지를 쓴다면 모든 이미지가 함께 참고할 **그림체 기준 이미지**(`art/references/style.png`)도 정합니다.
 3. **한 판을 끝까지 구현합니다 (`phaser-web` · `godot-game`).** 이동 → 별 획득 → 점수 표시 → 시간 종료까지 연결합니다. Phaser는 `src/game/`, Godot는 `game/`에 게임 규칙을 두고, 저장·입력·오디오는 템플릿이 제공하는 기능을 사용합니다.
-4. **필요한 에셋을 만들어 붙입니다 (`nano-banana` · `sprite-design` · `procedural-sfx` · `procedural-music` · `lyria`).** “별을 주웠을 때 짧은 효과음을 만들어 연결해 줘”처럼 게임 안에서 언제 쓰이는지 설명하면 MCP 도구로 PNG·WAV를 굽고 장면에 연결합니다.
+4. **필요한 에셋을 만들어 붙입니다 (`nano-banana` · `sprite-design` · `procedural-sfx` · `procedural-music` · `lyria`).** “GDD 에셋 목록대로 에셋을 만들어 줘”나 “별을 주웠을 때 짧은 효과음을 만들어 연결해 줘”처럼 요청하면, MCP 도구로 PNG·JSON·WAV를 굽고 장면에 연결한 뒤 에셋 목록의 상태를 `generated` → `in game`으로 갱신합니다.
 5. **플레이하고 검증한 뒤 배포합니다 (`game-dev-studio` · `phaser-web` · `godot-game`).** 아래 [실행과 검증](#실행과-검증) 방법으로 조작과 피드백을 확인하고, Phaser는 Playtest 패널로 버그 장면을 캡처해 대화에 첨부하면서 반복 개선합니다.
 
 ---
@@ -163,12 +164,14 @@ flowchart TD
 
 `/game-dev-studio`, `[Game Dev Studio](sidecar://agy-game-studio/studio/playtest)`, 또는 **⋮ → Extensions → Game Dev Studio**로 오른쪽 보조 패널에서 **Game Dev Studio**를 엽니다. Playtest 패널은 **Phaser Web** 게임을 대상으로 합니다. Godot 게임은 템플릿의 네이티브 실행과 테스트 경로로 검증합니다.
 
-- **Phaser 게임 연결**: Phaser 게임 루트에서 `npm ci`로 의존성을 설치한 뒤 `node /path/to/agy-game-studio/scripts/playtest-phaser.mjs`를 실행합니다(경로는 플러그인의 실제 설치 경로로 바꿉니다). 이 스크립트는 게임 자체의 Vite 설정을 standalone 모드로 띄우면서 캡처 브리지 스크립트(`server/services/phaser-bridge.js`)를 주입합니다. 터미널에 출력된 로컬 주소를 패널에 입력하고 **▶ Connect to game**을 누릅니다.
+- **원클릭 실행**: Phaser 게임 폴더에서 `npm ci`로 의존성을 한 번 설치합니다. 패널의 **Game folder**에는 현재 워크스페이스가 미리 채워지며, 워크스페이스 바로 아래 폴더에 Phaser 게임이 하나만 있으면 그 폴더를 자동으로 찾습니다. **▶ Run game**(또는 헤더의 **🚀 Run**)을 누르면 사이드카가 `scripts/playtest-phaser.mjs`를 실행해 게임 자체의 Vite 설정을 standalone 모드로 띄우고, 캡처 브리지(`server/services/phaser-bridge.js`)를 주입한 뒤 패널을 연결합니다.
+- **실행 실패 보고**: 의존성이 없거나 Vite가 시작하지 못하면 오류 카드에 원인과 서버 출력이 표시되고, **🚨 Send Game Error to Chat**으로 그대로 대화에 보낼 수 있습니다.
+- **직접 띄운 서버에 연결**: 터미널에서 `node /path/to/agy-game-studio/scripts/playtest-phaser.mjs`를 직접 실행했다면 **Connect to a server you started yourself**를 펼쳐 출력된 주소를 넣습니다.
 - **10초 DVR 링 버퍼**: 게임 화면의 최근 **10초(25 FPS 기준 250 프레임)**를 계속 기록합니다.
 - **일시정지, 탐색, 주석 (`F8` 또는 `` ` ``)**: 게임을 멈추고 10초 DVR 타임라인을 프레임 단위로 탐색하며, 시각적 버그 위에 박스·화살표·메모를 그린 뒤 다음 중 하나를 현재 대화에 보냅니다.
   - **📸 Frame**: 주석이 포함된 PNG 스크린샷과 게임 콘솔 로그
   - **🎞️ 10s GIF**: 게임 화면 해상도에 맞춘 최근 10초 분량의 애니메이션 GIF와 게임 콘솔 로그
-- 테스트가 끝나면 시작한 Vite 프로세스를 종료합니다.
+- **종료**: 헤더 왼쪽의 🕹️ 버튼을 누르면 Run 화면으로 돌아가면서 패널이 띄운 게임 서버도 종료됩니다. 플러그인을 끄거나 Antigravity를 닫아도 함께 종료됩니다.
 
 ![10초 DVR 되감기 탐색이 가능한 일시정지·주석 모드 (원본 버전 화면)](assets/playtest-studio-annotate.png)
 
@@ -201,21 +204,21 @@ flowchart TD
 
 절차적 DSL로 직접 작성하든, Nano Banana와 Lyria로 아트와 음악을 생성하든, 에셋은 다음 순서로 게임에 연결합니다.
 
-1. **에셋을 만들거나 생성합니다**: `.sprite`, `.music`, `.sfx` 파일을 작성하거나, `image_generate`로 캐릭터 시트와 배경을, `music_generate`로 배경음악을 만듭니다.
+1. **에셋을 만들거나 생성합니다**: GDD 에셋 목록의 각 줄(키, 출력 파일, 크기, 애니메이션 태그)을 기준으로 `.sprite`, `.music`, `.sfx` 파일을 작성하거나, `image_generate`로 캐릭터 시트와 배경을, `music_generate`로 배경음악을 만듭니다. AI 이미지는 매번 그림체 기준 이미지를 `inputImages`에 함께 넘깁니다.
 2. **게임에서 바로 쓸 수 있는 파일로 굽습니다**:
    - **스프라이트**: `sprite_normalize` 또는 `sprite_compile`로 `.png` 시트와 `.json` 매니페스트를 만듭니다.
    - **오디오**: `sfx_synthesize`, `music_synthesize`, `music_generate`로 `.wav` 또는 `.mp3` 파일을 만듭니다.
-   - MCP 도구에 넘기는 입력·출력 경로는 게임 루트를 기준으로 확인한 뒤 **절대 경로**로 전달합니다.
+   - MCP 도구는 **절대 경로만** 받습니다(상대 경로는 오류). 게임이 읽는 파일은 `public/assets/`(Phaser) 또는 `game/assets/`(Godot)에, 원본 생성물·미리보기·DSL 소스는 배포되지 않는 `art/`에 둡니다. Godot은 `art/.gdignore`를 만들어 import 대상에서 뺍니다.
 3. **템플릿에 등록합니다**:
-   - **Phaser Web**: PNG와 WAV를 `public/assets/` 아래에 두고 `src/game/assets.ts`의 키와 `queueAssets`에 등록합니다. 균일한 시트는 `load.spritesheet('hero', 'hero.png', { frameWidth: 32, frameHeight: 32 })`로 읽고, `this.anims.generateFrameNumbers(...)`로 애니메이션을 등록합니다.
-   - **Godot Mobile · PC**: PNG 시트를 게임 에셋 폴더에 import하고 AnimatedSprite2D의 SpriteFrames에서 프레임 크기에 맞춰 나눕니다. WAV는 AudioStream으로 import한 뒤 템플릿의 AudioManager에 연결합니다.
+   - **Phaser Web**: `src/game/assets.ts`에 키를 두고 `queueAssets`에서 시트는 `load.aseprite('hero', 'sprites/hero.png', 'sprites/hero.json')`, 소리는 `load.audio`로 읽습니다. 애니메이션은 [`skills/phaser-web/scripts/sheetAnims.ts`](skills/phaser-web/scripts/sheetAnims.ts)의 `createSheetAnims(scene, 'hero')`로 등록하면 JSON의 태그대로 `hero-idle`, `hero-walk`… 가 프레임 속도·반복 설정과 함께 만들어집니다.
+   - **Godot Mobile · PC**: PNG·JSON을 `game/assets/sprites/`에 두고 import한 뒤, [`skills/godot-game/scripts/`](skills/godot-game/scripts/)의 두 스크립트를 `game/tools/`에 복사해 `bake_sprite_frames.gd`로 JSON을 SpriteFrames `.tres`로 굽고 AnimatedSprite2D에 연결합니다. WAV는 AudioStream으로 import한 뒤 템플릿의 AudioManager에 연결합니다.
 4. **대상 장면에서 확인합니다**: 애니메이션의 프레임 순서·재생 속도와 소리가 원하는 타이밍에 나오는지 실제 게임에서 확인합니다. Phaser는 Playtest 패널로 문제 장면을 캡처해 대화에 첨부할 수 있습니다.
 
 ---
 
 ## 번들 MCP 서버 (`game-studio`, 도구 10개)
 
-`mcp_config.json`은 `scripts/run-mcp.mjs`를 통해 헤드리스 Go 엔진 서버(`mcp/`)를 stdio로 노출합니다. 런처는 Go 모듈을 선언된 의존성으로 빌드한 뒤 실행하며, Python이나 `uv` 없이 Antigravity 에이전트에 10개 도구를 제공합니다.
+`mcp_config.json`은 `scripts/run-mcp.mjs`를 통해 헤드리스 Go 엔진 서버(`mcp/`)를 stdio로 노출합니다. 런처는 Go 모듈을 선언된 의존성으로 빌드해 사용자 캐시 폴더(macOS: `~/Library/Caches/agy-game-studio/mcp/`, `GAME_STUDIO_CACHE_DIR`로 변경 가능)에 저장하고, 소스가 같으면 저장된 실행 파일을 바로 실행합니다. 캐시 폴더에 쓸 수 없으면 임시 폴더에 빌드해 실행합니다. 이 서버는 Python이나 `uv` 없이 Antigravity 에이전트에 10개 도구를 제공합니다.
 
 | 도구 | 용도 |
 | :--- | :--- |
@@ -262,7 +265,14 @@ npm test
 
 `npm run build`는 TypeScript 소스(`src/`)를 타입 검사하고 Vite로 독립 실행형 프론트엔드 번들(`dist/index.html`, `dist/app.js`, `dist/styles.css`)을 만듭니다. 커밋된 `dist/` 폴더는 외부 `node_modules` 없이 동작합니다.
 
-Phaser 템플릿 데모와 Studio가 실행 중이라면, 게임 루트에서 `node /path/to/agy-game-studio/tests/phaser-playtest-smoke.mjs <studio-url> <game-url>`로 실제 게임 연결, 일시정지, 주석, PNG·GIF 전송을 점검할 수 있습니다. 이 스크립트는 게임의 Playwright를 사용하므로 Chromium 브라우저를 설치하거나 `CHROMIUM_PATH`로 로컬 실행 파일을 지정합니다.
+패널 전체 흐름(Run → 게임 프레임 수신 → 일시정지 → 주석 → PNG·GIF 전송 → 종료)은 번들 예제로 점검합니다. Studio 서버를 직접 띄우고 실제 대화로는 아무것도 보내지 않습니다.
+
+```bash
+(cd examples/phaser-demo && npm ci)
+node tests/phaser-playtest-smoke.mjs
+```
+
+다른 게임은 `--game <게임 폴더 또는 playtest URL>`, 이미 실행 중인 Studio는 `--studio <url>`로 지정합니다. Playwright가 필요하며, Chromium 경로는 `CHROMIUM_PATH`로 바꿀 수 있습니다.
 
 ### 3. 심볼릭 링크를 통한 디버깅과 리로드
 
@@ -273,7 +283,7 @@ Antigravity는 사이드카의 `stdout`과 `stderr`를 다음 위치에 기록�
 ```
 
 - **프론트엔드 변경 (`src/`)**: `npm run build`를 실행한 뒤 Game Dev Studio 패널을 새로고침하거나 닫았다가 다시 엽니다. 사이드카 서버는 요청마다 `dist/index.html`, `dist/app.js`, `dist/styles.css`를 디스크에서 새로 읽습니다.
-- **백엔드 또는 MCP 변경 (`server/`, `sidecars/studio/`, `mcp/`)**: `npm test`와 `(cd mcp && go test ./...)`를 실행한 뒤 **Customizations → Installed**(또는 `/plugin`)에서 **Game Dev Studio**(`agy-game-studio`)를 껐다가 다시 켭니다. 다시 활성화하면 백그라운드 사이드카가 재시작되고 `scripts/run-mcp.mjs`가 `mcp/`를 다시 빌드합니다.
+- **백엔드 또는 MCP 변경 (`server/`, `sidecars/studio/`, `mcp/`)**: `npm test`와 `(cd mcp && go test ./...)`를 실행한 뒤 **Customizations → Installed**(또는 `/plugin`)에서 **Game Dev Studio**(`agy-game-studio`)를 껐다가 다시 켭니다. 다시 활성화하면 백그라운드 사이드카가 재시작되고, `mcp/` 소스가 바뀌었다면 `scripts/run-mcp.mjs`가 새로 빌드합니다(바뀌지 않았으면 캐시된 실행 파일을 씁니다).
 - **스킬 변경 (`skills/`)**: 심볼릭 링크된 저장소의 `SKILL.md`와 `references/` 수정 사항은 다음 에이전트 턴부터(또는 플러그인을 껐다 켠 뒤) 반영됩니다.
 
 ---

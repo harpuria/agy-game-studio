@@ -72,27 +72,30 @@ inst drums wave=kick              vol=0.28 pan=0.00
 pattern p_lead  = E5:2 C5:4 G4:4 | A4:2. G4:4 |
 pattern p_bass  = (C2 C2 C3 C2):8*2 | (A1 A1 A2 A1):8*2 |
 pattern p_drums = kick:8 hat:8 snare:8 hat:8 kick:8 hat:8 snare:8 (tom_hi*2):16 |
+# p_lead and p_bass are 2 bars and p_drums is 1 bar, so drums repeat twice as often.
 
 track ch01 lead:  p_lead*2
 track ch02 bass:  p_bass*2
-track ch03 drums: p_drums*2
+track ch03 drums: p_drums*4
 ```
 
 1. **Discover palettes**: Call `sound_presets` to view all `waveTypes`, `ym2612Presets`, and `tempoMarkings`.
-2. **Validate theory and duration**: Save your score (for example `assets/music/stage1.music`) and call `music_validate`:
+2. **Validate theory and duration**: Save your score (for example `<GAME_ROOT>/art/music/stage1.music`) and call `music_validate`:
 
 ```json
 {
   "tool": "music_validate",
   "arguments": {
-    "filePath": "assets/music/stage1.music",
-    "minChannels": 8,
-    "minDurationSec": 30
+    "filePath": "<GAME_ROOT>/art/music/stage1.music",
+    "minChannels": 3,
+    "minDurationSec": 5
   }
 }
 ```
 
-For short fanfares or game-over stingers, pass lower thresholds such as `"minChannels": 6, "minDurationSec": 5`.
+The quick-start score is a 3-track, about 7-second sketch, so it passes only with these lowered thresholds. Without them `music_validate` applies the production BGM defaults (`8` channels, `30` seconds), which a finished stage loop must pass: grow the sketch into `8`+ tracks and a full form before baking the final `.wav`. For short fanfares or game-over stingers, use thresholds such as `"minChannels": 6, "minDurationSec": 5`.
+
+If validation reports `timing drift on track`, that track is shorter or longer than the others: count each pattern's bars and adjust its `*N` repeat so every track spans the same number of bars.
 
 3. **Synthesize and bake `.wav` audio**: Call `music_synthesize` to bake the final `.wav` (plus optional `outStemsPath` or `apple: true` on macOS):
 
@@ -100,8 +103,8 @@ For short fanfares or game-over stingers, pass lower thresholds such as `"minCha
 {
   "tool": "music_synthesize",
   "arguments": {
-    "filePath": "assets/music/stage1.music",
-    "outWavPath": "assets/music/stage1.wav"
+    "filePath": "<GAME_ROOT>/art/music/stage1.music",
+    "outWavPath": "<GAME_ROOT>/public/assets/audio/stage1.wav"
   }
 }
 ```
@@ -119,10 +122,12 @@ Review full voice-leading rules in [`references/music_theory_and_arranging.md`](
 3. **Preserve phrasing continuity**: Tie held notes across barlines (`~` or `~ |`), articulate repeated chord stabs with `R:16`, and verify every bar with `|` barlines.
 4. **Anchor `C1` to `C2` bass** so `50%` to `75%` of spectral energy lives under `260 Hz` without stationary noise on drums or leads.
 5. **Pass `music_validate`** (`passed: true`) with clean diatonic/modal voice-leading (no sustained minor seconds, flat ninths, or simultaneous `G` vs. `G#`).
-6. **Bake to `.wav` and pre-decode at startup** with `&^ 3` aligned lengths and seek offsets.
+6. **Bake to `.wav` and set it to loop in the engine**: Phaser plays it through `AudioService.playMusic`; Godot needs `edit/loop_mode=1` (Forward) in the `.wav.import` settings.
 
 ---
 
-## Import into the game
+## Paths and import into the game
 
-Choose output paths in the game's asset directory. For Phaser, follow [phaser-web](../phaser-web/SKILL.md) and register the exported file in the game's preload list. For Godot, follow [godot-game](../godot-game/SKILL.md) and confirm the imported resource in the target scene.
+Every path passed to the `game-studio` tools must be absolute; the tools reject relative paths. In the examples, replace `<GAME_ROOT>` with the game repository's absolute root. Files the game loads go under `public/assets/` (Phaser) or `game/assets/` (Godot); raw generations, previews and DSL sources go under `<GAME_ROOT>/art/` so they never ship. See the folder layout in [vibe-game-developer](../vibe-game-developer/SKILL.md#asset-folders-and-paths) Start from the asset's row in the GDD *Asset manifest* (key, output file, size, tags) and set its status to `generated` once the tool report passes.
+
+For Phaser, follow [phaser-web](../phaser-web/SKILL.md) and register the exported file in the game's preload list. For Godot, follow [godot-game](../godot-game/SKILL.md) and confirm the imported resource in the target scene.

@@ -75,7 +75,7 @@ Nano Banana 2 Lite generates images within a 1K bounding box across 14 discrete 
   "tool": "image_generate",
   "arguments": {
     "prompt": "A vibrant sticker of a cute robot drinking bubble tea, white background",
-    "outPath": "robot_sticker.png",
+    "outPath": "<GAME_ROOT>/art/raw/robot_sticker.png",
     "model": "nano-banana-2-lite",
     "aspectRatio": "1:1"
   }

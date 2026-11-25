@@ -22,8 +22,8 @@ Generate a Step 1 character reference sheet first, then pass `inputImages: ["cha
   "tool": "image_generate",
   "arguments": {
     "prompt": "Keep the exact character identity and 4-step color swatches from the reference image: generate a uniform 4x4 sprite sheet grid on a flat unlit #00FF00 background with at least 15% empty #00FF00 margin inside every cell, no grid lines, and no labels.",
-    "inputImages": ["character_sheet.png"],
-    "outPath": "raw_grid_part1.png",
+    "inputImages": ["<GAME_ROOT>/art/raw/character_sheet.png"],
+    "outPath": "<GAME_ROOT>/art/raw/raw_grid_part1.png",
     "model": "nano-banana-2.1",
     "resolution": "2K",
     "aspectRatio": "1:1",

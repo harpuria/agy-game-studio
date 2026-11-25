@@ -333,7 +333,7 @@ func Inspect(opts InspectOptions) (SynthReport, error) {
 					rows = man.Meta.Rows
 				}
 				if len(man.Meta.FrameTags) > 0 {
-					tags = man.Meta.FrameTags
+					tags = CompiledTagsFromManifest(man.Meta.FrameTags)
 				}
 			}
 		}

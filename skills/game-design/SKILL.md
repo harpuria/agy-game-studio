@@ -65,6 +65,7 @@ Align on vision and constraints step by step before generating assets or impleme
    - *Isometric Strategy / Builder*: `1280x720` canvas with `2:1` diamond tiles (`64x32` or `128x64`) and depth-sorted sprites.
 3. **Resolve dependencies in order**: Lock in **Genre and Camera Projection** -> **Simulation and Core Loop** -> **Win/Loss Rules and Controls** -> **Visual Style, Resolution, and Sprite Pipeline** -> **Audio and Music Pipeline** -> **Scene Flow, HUD, and Save Storage**.
 4. **Write `GDD.md` at the template's location** (`docs/game/GDD.md` for Phaser, `docs/GDD.md` for Godot): Synthesize confirmed choices using [`references/gdd_template.md`](references/gdd_template.md).
+5. **Fill the asset manifest for the first playable milestone**: one row per file the game will load (key, kind, pipeline and tool, source or prompt, output file, size and frames, tags, where it is used, status `planned`). This table is the handoff to the asset skills and the engine skills; list nothing the first milestone does not use.
 
 ---
 
@@ -96,7 +97,8 @@ Branch 4: Visual Art Direction, Resolution & Sprite Pipeline
   │    ├── Path A: Two-Step AI Character Sheet -> 4x4 Chroma Grid (image_generate -> sprite_normalize)
   │    ├── Path B: Pure-Code .sprite SDF/Pixel DSL (sprite_compile, 12 Retro-HD palettes, 12 4-step material ramps)
   │    └── Path C: Hybrid (Path A for heroes/bosses/portraits/backgrounds + Path B for tilesets/projectiles/props)
-  └── Entity animation motion tags (e.g., idle, walk, run, jump, fall, attack, hit, death)
+  ├── Entity animation motion tags (e.g., idle, walk, run, jump, fall, attack, hit, death)
+  └── Art style anchor: one style reference image (art/references/style.png), a reusable style prompt line, and the palette
 
 Branch 5: Audio & Music Pipeline
   ├── Sound effects (SFX): Pure-code procedural-sfx (.sfx DSL via sound_presets + sfx_synthesize -> baked .wav)
@@ -149,4 +151,6 @@ Compile confirmed decisions into `GDD.md` using [`references/gdd_template.md`](r
 - [ ] **Controls mapped**: Logical actions cover Keyboard, Mouse/Pointer, Gamepad, or Touch targets.
 - [ ] **Visual pipeline and animation tags specified**: States virtual resolution, frame tier (`256x256` 2D HD vs. `32x32`/`64x64` pixel art), pipeline path (`A`, `B`, or `C`), and exact motion tags per entity.
 - [ ] **Audio and music plan specified**: Lists `.sfx` cues and `.music` (YM2612/`apple`) or `lyria` BGM tracks, baked to `.wav`/`.mp3` for import into the game.
+- [ ] **Art style anchor recorded** (when any asset uses `image_generate`): style reference image path, style prompt line and palette. If the style image does not exist yet, the first asset task generates it and the user approves it before other images.
+- [ ] **Asset manifest filled** for the first milestone: every key the code will load has one row with its output file, size and frames, tags and target scene.
 - [ ] **Persistence and verification ready**: Record the save schema, target platform and acceptance checks in the game documents.

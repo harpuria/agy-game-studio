@@ -72,8 +72,8 @@ Pass up to 10 images (such as concept art, character designs, or landscapes) to 
   "arguments": {
     "prompt": "An emotional cinematic folk song in E Minor at 90 BPM with fingerpicked acoustic guitar and cello.",
     "model": "lyria-3-pro-preview",
-    "outPath": "mountain_folk.mp3",
-    "outLyricsPath": "mountain_folk_lyrics.txt"
+    "outPath": "<GAME_ROOT>/public/assets/audio/mountain_folk.mp3",
+    "outLyricsPath": "<GAME_ROOT>/public/assets/audio/mountain_folk_lyrics.txt"
   }
 }
 ```

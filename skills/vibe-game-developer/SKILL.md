@@ -54,7 +54,7 @@ Always check the workspace before designing, writing code, or placing assets. Th
 | **Procedural SFX (`.sfx`)** | `procedural-sfx` | **SFX Designer**: Lists built-in archetypes (`sound_presets`) and synthesizes 16-bit 44.1 kHz stereo WAV cues (`sfx_synthesize`) with acoustic QA validation. |
 | **Procedural BGM (`.music`)** | `procedural-music` | **Procedural Composer**: Validates music theory and barlines (`music_validate`) and renders polyphonic `.music` scores (`music_synthesize`, SEGA YM2612/PSG or macOS `apple: true` CoreAudio) to `.wav` and stems. |
 | **Generative AI music** | `lyria` | **AI Music Composer**: Calls `music_generate` (`lyria-3.5`, `lyria-3-clip-preview`, `lyria-3-pro-preview`) for 44.1 kHz stereo `.wav` or `.mp3` tracks, vocal songs with lyrics (`outLyricsPath`), and image-to-music cues. |
-| **Phaser Playtest panel** | `game-dev-studio` | **Studio Playtest Launcher**: Connects a Phaser Web game via `scripts/playtest-phaser.mjs` and surfaces `[Game Dev Studio](sidecar://agy-game-studio/studio/playtest)` for 10s DVR capture, bug annotation, and GIF reports. |
+| **Phaser Playtest panel** | `game-dev-studio` | **Studio Playtest Launcher**: Starts and connects a Phaser Web game from the panel's **Run game** button and surfaces `[Game Dev Studio](sidecar://agy-game-studio/studio/playtest)` for 10s DVR capture, bug annotation, and GIF reports. |
 
 ---
 
@@ -66,7 +66,7 @@ The plugin runs the headless Go `game-studio` MCP server (`mcp_config.json`) wit
 | :--- | :--- | :--- |
 | **`game-studio` MCP Audio** | `sound_presets`, `sfx_synthesize`, `music_validate`, `music_synthesize`, `music_generate` | Lists SFX/music presets, validates `.music` scores, renders `.sfx` and `.music` scripts to 44.1 kHz stereo `.wav` and stems, and generates AI `.wav`/`.mp3` tracks with Lyria. |
 | **`game-studio` MCP Sprite & Image** | `sprite_inspect`, `sprite_compile`, `sprite_normalize`, `sprite_extract_palette`, `image_generate` | Generates AI art and `4x4` chroma grids with Nano Banana, strips chroma backgrounds and packs `.png`/`.json`/`.aseprite`/`.sprite`/`.gif`, compiles `.sprite` DSL, and extracts 4-step shading ramps. |
-| **Game Dev Studio (`/playtest`)** | `sidecar://agy-game-studio/studio/playtest` | Connects to a running **Phaser Web** game (`scripts/playtest-phaser.mjs`) with a 10-second DVR rewind buffer, visual bug annotation (`F8` or `` ` ``), and PNG/GIF export to chat. |
+| **Game Dev Studio (`/playtest`)** | `sidecar://agy-game-studio/studio/playtest` | Starts a **Phaser Web** game in one click (**Run game**) and connects to it, with a 10-second DVR rewind buffer, visual bug annotation (`F8` or `` ` ``), and PNG/GIF export to chat. |
 
 ---
 
@@ -110,7 +110,20 @@ flowchart TD
 
 ## Asset pipeline decision rules
 
-Follow the pipeline recorded in `GDD.md`, or align with the user first. Only produce assets that the current milestone actually uses—avoid speculative asset batches. Always resolve MCP input and output paths from the game repository root and pass **absolute paths** to `game-studio` MCP tools.
+Follow the pipeline and the asset manifest recorded in `GDD.md`, or align with the user first. Only produce assets that the current milestone actually uses—avoid speculative asset batches.
+
+### Asset folders and paths
+
+The `game-studio` tools reject relative paths: the server runs from the plugin folder, so a relative path would land in the plugin installation instead of the game. Resolve the game repository root (`<GAME_ROOT>` in skill examples) and pass absolute paths.
+
+| Kind | Phaser Web | Godot Mobile / PC |
+| :--- | :--- | :--- |
+| Sprite sheets the game loads (`.png` + `.json`) | `<GAME_ROOT>/public/assets/sprites/` | `<GAME_ROOT>/game/assets/sprites/` |
+| Backgrounds, UI images | `<GAME_ROOT>/public/assets/backgrounds/`, `…/ui/` | `<GAME_ROOT>/game/assets/backgrounds/`, `…/ui/` |
+| SFX and music the game plays | `<GAME_ROOT>/public/assets/audio/` | `<GAME_ROOT>/game/assets/audio/` |
+| Raw AI generations, style references, previews, GIFs, `.aseprite`, `.sprite`/`.sfx`/`.music` sources, lyrics | `<GAME_ROOT>/art/` (`raw/`, `references/`, `previews/`, `sprites/`, `sfx/`, `music/`) | same, plus an empty `<GAME_ROOT>/art/.gdignore` so Godot neither imports nor exports it |
+
+Keep `art/` in version control so assets can be regenerated, and keep everything under `public/assets/` or `game/assets/` limited to files the game actually loads.
 
 ### Sprites, visuals, and runtime VFX
 
@@ -137,8 +150,8 @@ Confirm animation tags, camera projection (`2D side-profile`, `3/4 top-down`, `2
 
 ### Wiring baked assets into each template
 
-- **Phaser Web**: Place baked `.png` and `.wav` files under `public/assets/`, declare keys in `src/game/assets.ts`, queue them in `queueAssets`, load uniform sheets with `load.spritesheet(..., { frameWidth, frameHeight })`, register animations with `anims.generateFrameNumbers`, and play audio through `AudioService`.
-- **Godot Mobile & PC**: Place baked `.png` and `.wav` files under `game/assets/` (or the game's asset folder), let Godot import them (`--editor --import --quit`), slice uniform sheets in `SpriteFrames` for `AnimatedSprite2D` matching tag frame order and FPS, enable loop on BGM `.wav.import` if looping, and play audio through `AudioManager`.
+- **Phaser Web**: Place baked `.png`, `.json` and `.wav` files under `public/assets/`, declare keys in `src/game/assets.ts`, queue sheets with `load.aseprite(key, png, json)` in `queueAssets`, register animations with `createSheetAnims` from `phaser-web/scripts/sheetAnims.ts`, and play audio through `AudioService`.
+- **Godot Mobile & PC**: Place baked `.png` and `.wav` files under `game/assets/` (or the game's asset folder), let Godot import them (`--editor --import --quit`), bake each sheet's `.json` manifest into a `SpriteFrames` `.tres` with `godot-game/scripts/bake_sprite_frames.gd` for `AnimatedSprite2D`, enable loop on BGM `.wav.import` if looping, and play audio through `AudioManager`.
 
 ### Fail-fast credential policy
 
@@ -151,13 +164,14 @@ Confirm animation tags, camera projection (`2D side-profile`, `3/4 top-down`, `2
 Work through the stages needed for the user's request and verify each gate before advancing:
 
 1. **Design (`game-design`)**
-   - *Gate*: Core loop, camera projection, controls, win/loss rules, visual/audio pipeline, and save schema are agreed and written to `docs/game/GDD.md` (Phaser) or `docs/GDD.md` (Godot).
+   - *Gate*: Core loop, camera projection, controls, win/loss rules, visual/audio pipeline, art style anchor, save schema, and the *Asset manifest* for the first milestone are agreed and written to `docs/game/GDD.md` (Phaser) or `docs/GDD.md` (Godot).
 2. **Project setup & playable slice (`phaser-web` or `godot-game`)**
    - *Gate*: First playable end-to-end round works (start -> core action -> win/loss -> restart), game rules stay inside `src/game/` (Phaser) or `game/` (Godot), and template services handle saves, settings, input, pause, and audio.
 3. **Visual & audio assets (`sprite-design`, `nano-banana`, `procedural-sfx`, `procedural-music`, `lyria`)**
-   - *Gate*: Assets are baked via MCP tools, visually/acoustically checked, imported into the template, and verified in the live target scene (animations, scale, loop boundaries, SFX cooldowns).
+   - Work through the *Asset manifest* rows in order (style reference first when AI images are used). Each tool call uses the row's output path and tags.
+   - *Gate*: Every manifest row of the milestone is `in game`: baked via MCP tools with a passing report, visually/acoustically checked, imported into the template, and verified in the live target scene (animations, scale, loop boundaries, SFX cooldowns). Placeholder shapes from stage 2 are replaced.
 4. **Verification & playtest (`phaser-web` + `game-dev-studio`, or `godot-game`)**
-   - **Phaser Web**: Run `npm run check`; run `npm run test:e2e` for UI/input changes (`E2E_PREVIEW=1 npm run test:e2e` for build/service changes). For interactive playtesting or bug capture, launch `scripts/playtest-phaser.mjs` and surface `[Game Dev Studio](sidecar://agy-game-studio/studio/playtest)` via `game-dev-studio`.
+   - **Phaser Web**: Run `npm run check`; run `npm run test:e2e` for UI/input changes (`E2E_PREVIEW=1 npm run test:e2e` for build/service changes). For interactive playtesting or bug capture, surface `[Game Dev Studio](sidecar://agy-game-studio/studio/playtest)` via `game-dev-studio`.
    - **Godot Mobile**: Run `godot --headless --path . --editor --import --quit` and the affected `tests/integration.tscn` scenarios (default, `--disabled`, `--native`), plus `python3 tools/check_docs.py` if docs changed. Run the scene in the editor (`F5`) or `godot --path .`.
    - **Godot PC**: Run `bash tools/validate.sh` (set `GODOT` if outside `PATH`) and inspect both summary and logs. Run the scene in the editor (`F5`) or `godot --path .` (`--capture` for GUI verification).
    - *Reporting rule*: Explicitly separate checks that actually ran from unverified browsers, OS binaries, physical mobile devices, or live store backends. Never claim device or store verification from desktop/headless tests alone.

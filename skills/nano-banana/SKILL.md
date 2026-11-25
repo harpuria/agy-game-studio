@@ -83,6 +83,17 @@ Consult the model cards in `references/` for complete resolution grids, token bu
 
 ---
 
+## One style for the whole game (style anchor)
+
+Separate prompts drift apart in line weight, lighting and palette. Anchor every image in a game to one approved style reference:
+
+1. **Read the GDD**: Take the style reference path (`<GAME_ROOT>/art/references/style.png`), the style prompt line and the palette from the GDD's *Art style anchor*, and the asset's row from the GDD *Asset manifest* (key, output file, size, tags).
+2. **Create the anchor once**: If `style.png` does not exist yet, generate one key-art or style-sheet image from the style prompt line, show it to the user, and continue only after they approve it. Record any change to the prompt line in the GDD.
+3. **Use it everywhere**: Start every prompt with the style prompt line and put `style.png` in `inputImages` of every `image_generate` call (next to the character sheet when there is one). Say in the prompt which reference is which, e.g. "Match the art style of the style reference; keep the character from the character sheet."
+4. **Update the manifest**: After the file passes its checks, set the row's status to `generated`.
+
+---
+
 ## Core MCP workflows
 
 ### 1. Seamless `4:1` parallax background (`image_generate`)
@@ -91,8 +102,9 @@ Consult the model cards in `references/` for complete resolution grids, token bu
 {
   "tool": "image_generate",
   "arguments": {
-    "prompt": "A seamless 2D side-scrolling pixel-art parallax background of a synthwave city skyline at dusk, clean horizon",
-    "outPath": "assets/backgrounds/synthwave_parallax.png",
+    "prompt": "Match the art style of the style reference. A seamless 2D side-scrolling parallax background of a synthwave city skyline at dusk, clean horizon",
+    "inputImages": ["<GAME_ROOT>/art/references/style.png"],
+    "outPath": "<GAME_ROOT>/public/assets/backgrounds/synthwave_parallax.png",
     "model": "nano-banana-2.1",
     "resolution": "2K",
     "aspectRatio": "4:1",
@@ -108,7 +120,7 @@ Consult the model cards in `references/` for complete resolution grids, token bu
   "tool": "image_generate",
   "arguments": {
     "prompt": "A minimalist flat illustration of a ruby potion bottle icon on a dark UI card",
-    "outPath": "assets/ui/potion_icon.png",
+    "outPath": "<GAME_ROOT>/public/assets/ui/potion_icon.png",
     "model": "nano-banana-2-lite",
     "aspectRatio": "1:1",
     "enterprise": true,
@@ -122,16 +134,16 @@ Consult the model cards in `references/` for complete resolution grids, token bu
 
 Splitting character design from animation grid generation keeps proportions and colors stable across frames:
 
-1. **Step 1 (Reference turnaround sheet)**: Call `image_generate` (`model: "nano-banana-2.1"`, `resolution: "2K"`, `aspectRatio: "1:1"`) with readable silhouette proportions (`1:2` to `1:3` head-to-body), the game's camera projection (`2D side-profile`, `3/4 top-down`, or `2:1 isometric`), clear limb separation from the torso, and a printed 4-step color swatch bar on a flat neutral gray background.
-2. **Step 2 (`inputImages` chroma-key sprite grid)**: Pass `inputImages: ["assets/raw/character_sheet.png"]` with `thinkingLevel: "high"` to generate a uniform `4x4` grid (`16` frames) on a flat, unlit `#00FF00` bright green (or `#FF00FF` magenta) background with zero grid lines, borders, shadows, or labels, and at least `15%` empty cell margin on all four sides:
+1. **Step 1 (Reference turnaround sheet)**: Call `image_generate` (`model: "nano-banana-2.1"`, `resolution: "2K"`, `aspectRatio: "1:1"`, `inputImages: ["<GAME_ROOT>/art/references/style.png"]`) with readable silhouette proportions (`1:2` to `1:3` head-to-body), the game's camera projection (`2D side-profile`, `3/4 top-down`, or `2:1 isometric`), clear limb separation from the torso, and a printed 4-step color swatch bar on a flat neutral gray background.
+2. **Step 2 (`inputImages` chroma-key sprite grid)**: Pass `inputImages: ["<GAME_ROOT>/art/raw/character_sheet.png", "<GAME_ROOT>/art/references/style.png"]` with `thinkingLevel: "high"` to generate a uniform `4x4` grid (`16` frames) on a flat, unlit `#00FF00` bright green (or `#FF00FF` magenta) background with zero grid lines, borders, shadows, or labels, and at least `15%` empty cell margin on all four sides:
 
 ```json
 {
   "tool": "image_generate",
   "arguments": {
-    "prompt": "Keep the exact character proportions and color swatches from the reference sheet. Uniform 4x4 sprite sheet grid in 2D side-profile facing right on a flat unlit #00FF00 background, no grid lines or labels, at least 15% empty #00FF00 margin inside every cell. Row 1: idle. Row 2: walk. Row 3: run. Row 4: 4-phase jump arc (crouch anticipation, launch, rising ascent, mid-air apex).",
-    "inputImages": ["assets/raw/character_sheet.png"],
-    "outPath": "assets/raw/raw_grid_part1.png",
+    "prompt": "Keep the exact character proportions and color swatches from the character sheet and the art style of the style reference. Uniform 4x4 sprite sheet grid in 2D side-profile facing right on a flat unlit #00FF00 background, no grid lines or labels, at least 15% empty #00FF00 margin inside every cell. Row 1: idle. Row 2: walk. Row 3: run. Row 4: 4-phase jump arc (crouch anticipation, launch, rising ascent, mid-air apex).",
+    "inputImages": ["<GAME_ROOT>/art/raw/character_sheet.png", "<GAME_ROOT>/art/references/style.png"],
+    "outPath": "<GAME_ROOT>/art/raw/raw_grid_part1.png",
     "model": "nano-banana-2.1",
     "resolution": "2K",
     "aspectRatio": "1:1",
@@ -144,15 +156,17 @@ Splitting character design from animation grid generation keeps proportions and 
 
 ---
 
-## Import into the game
+## Paths and import into the game
 
-Choose output paths in the game's asset directory. For Phaser, follow [phaser-web](../phaser-web/SKILL.md) and register the exported file in the game's preload list. For Godot, follow [godot-game](../godot-game/SKILL.md) and confirm the imported resource in the target scene.
+Every path passed to the `game-studio` tools must be absolute; the tools reject relative paths. In the examples, replace `<GAME_ROOT>` with the game repository's absolute root. Files the game loads go under `public/assets/` (Phaser) or `game/assets/` (Godot); raw generations, previews and DSL sources go under `<GAME_ROOT>/art/` so they never ship. See the folder layout in [vibe-game-developer](../vibe-game-developer/SKILL.md#asset-folders-and-paths) Start from the asset's row in the GDD *Asset manifest* (key, output file, size, tags) and set its status to `generated` once the tool report passes.
+
+For Phaser, follow [phaser-web](../phaser-web/SKILL.md) and register the exported file in the game's preload list. For Godot, follow [godot-game](../godot-game/SKILL.md) and confirm the imported resource in the target scene.
 
 
 ## Prompting best practices
 
 1. **Specify materials and camera**: Name surface textures, lighting direction, and camera projection (`strict 2D side-profile orthographic`, `2:1 isometric`, `16-bit pixel art`, `cel-shaded 2D art with dark outlines`).
 2. **Enforce sprite grid geometry**: State exact rows/columns (`4x4 grid`), unlit solid key background (`#00FF00`), zero borders or text labels, and `15%` empty cell margin.
-3. **Anchor identity with `inputImages`**: Always pass your Step 1 character sheet in `inputImages` when generating animation sheets or scene variations.
+3. **Anchor identity and style with `inputImages`**: Always pass the game's style reference, plus your Step 1 character sheet when generating animation sheets or scene variations.
 4. **Target edits precisely**: Name both what changes and what stays untouched (`"Change only the armor trim to gold. Keep the pose, expression, and background unchanged."`).
 5. **Frame scenes positively**: Describe what appears instead of negations (`"an empty, quiet cobblestone street"` rather than `"no cars"`).

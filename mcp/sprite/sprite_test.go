@@ -729,3 +729,50 @@ func TestParserFailFastErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestManifestFrameTagsUseStandardAsepriteFields(t *testing.T) {
+	tags := NewAsepriteFrameTags([]CompiledTag{
+		{Name: "idle", FromFrame: 0, ToFrame: 3, Frames: 4, DurationMs: 120, Loop: "pingpong"},
+		{Name: "walk", FromFrame: 4, ToFrame: 7, Frames: 4, DurationMs: 100, Loop: "loop"},
+		{Name: "jump", FromFrame: 8, ToFrame: 11, Frames: 4, DurationMs: 100, Loop: "once"},
+		{Name: "rewind", FromFrame: 12, ToFrame: 13, Frames: 2, DurationMs: 100, Loop: "reverse"},
+	})
+	jb, err := json.Marshal(tags)
+	if err != nil {
+		t.Fatalf("marshal tags: %v", err)
+	}
+	var raw []map[string]any
+	if err := json.Unmarshal(jb, &raw); err != nil {
+		t.Fatalf("unmarshal tags: %v", err)
+	}
+	want := []struct {
+		from, to          float64
+		direction, repeat string
+	}{{0, 3, "pingpong", ""}, {4, 7, "forward", ""}, {8, 11, "forward", "1"}, {12, 13, "reverse", ""}}
+	for i, w := range want {
+		got := raw[i]
+		if got["from"] != w.from || got["to"] != w.to || got["direction"] != w.direction {
+			t.Errorf("tag %d: got from=%v to=%v direction=%v, want %v %v %v", i, got["from"], got["to"], got["direction"], w.from, w.to, w.direction)
+		}
+		repeat, _ := got["repeat"].(string)
+		if repeat != w.repeat {
+			t.Errorf("tag %d: got repeat %q, want %q", i, repeat, w.repeat)
+		}
+		if got["fromFrame"] != w.from || got["loop"] == nil {
+			t.Errorf("tag %d: lost the tool's own fields: %v", i, got)
+		}
+	}
+
+	// A plain Aseprite export (only from/to/direction/repeat) reads back to the same ranges and loop modes.
+	var plain []AsepriteFrameTag
+	if err := json.Unmarshal([]byte(`[{"name":"idle","from":0,"to":3,"direction":"pingpong"},{"name":"jump","from":8,"to":11,"direction":"forward","repeat":"1"}]`), &plain); err != nil {
+		t.Fatalf("unmarshal plain tags: %v", err)
+	}
+	back := CompiledTagsFromManifest(plain)
+	if back[0].ToFrame != 3 || back[0].Frames != 4 || back[0].Loop != "pingpong" {
+		t.Errorf("plain idle tag read back as %+v", back[0])
+	}
+	if back[1].FromFrame != 8 || back[1].Loop != "once" {
+		t.Errorf("plain jump tag read back as %+v", back[1])
+	}
+}

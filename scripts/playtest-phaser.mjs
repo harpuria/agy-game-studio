@@ -1,4 +1,5 @@
 // Run from a Phaser template checkout. Resolve Vite and its config from that game.
+// The Game Dev Studio panel starts this script itself; it can also be run by hand.
 import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -25,3 +26,21 @@ const server = await createServer({
 });
 await server.listen();
 server.printUrls();
+// Machine-readable line for the Studio sidecar (server/services/phaser-launcher.mjs).
+const address = server.httpServer.address();
+console.log(`PLAYTEST_URL=http://127.0.0.1:${address.port}/`);
+
+let closing = false;
+async function close() {
+  if (closing) return;
+  closing = true;
+  await server.close();
+  process.exit(0);
+}
+process.on('SIGINT', close);
+process.on('SIGTERM', close);
+if (process.env.GAME_STUDIO_EXIT_ON_STDIN_CLOSE === '1') {
+  process.stdin.on('end', close);
+  process.stdin.on('close', close);
+  process.stdin.resume();
+}

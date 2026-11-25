@@ -74,9 +74,9 @@ Add `"Instrumental only, no vocals"` to synthesize background beds or ambient so
   "tool": "music_generate",
   "arguments": {
     "prompt": "An atmospheric lo-fi jazz track at 85 BPM in E Minor. Instrumental only, no vocals.",
-    "outPath": "lofi_track.mp3",
+    "outPath": "<GAME_ROOT>/public/assets/audio/lofi_track.mp3",
     "model": "lyria-3.5",
-    "outLyricsPath": "lofi_track_structure.txt"
+    "outLyricsPath": "<GAME_ROOT>/public/assets/audio/lofi_track_structure.txt"
   }
 }
 ```
@@ -86,7 +86,7 @@ Add `"Instrumental only, no vocals"` to synthesize background beds or ambient so
   "tool": "music_generate",
   "arguments": {
     "prompt": "An atmospheric lo-fi jazz track at 85 BPM in E Minor. Instrumental only, no vocals.",
-    "outPath": "lofi_track.wav",
+    "outPath": "<GAME_ROOT>/public/assets/audio/lofi_track.wav",
     "model": "lyria-3.5",
     "format": "wav",
     "apiMode": "interactions",

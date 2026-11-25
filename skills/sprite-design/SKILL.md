@@ -47,7 +47,7 @@ Generating a full sprite sheet in one prompt fails when an image model tries to 
 
 ### Step 0: Confirm motions, projection, resolution, and path
 
-Before creating an asset, confirm any detail missing from the request:
+Start from the asset's row in the GDD *Asset manifest* (key, output files, frame size, tags with frame ranges, durations and loop modes) and the GDD *Art style anchor* (see [nano-banana](../nano-banana/SKILL.md#one-style-for-the-whole-game-style-anchor)). Use the row's tags as the `tags` argument so the JSON manifest matches what the code plays, and set the row's status to `generated` once the sheet passes its checks. Confirm any detail missing from the row or the request:
 
 1. **Animation tags (`tags`)**:
    - Side-scroller or platformer: `idle`, `walk`, `run`, `jump` (with mid-air apex pose), `fall`, `crouch`, `attack`, `hit`, `death`.
@@ -66,8 +66,9 @@ Invoke `image_generate` to build a turnaround character sheet first:
 {
   "tool": "image_generate",
   "arguments": {
-    "prompt": "2D game character reference sheet of a black anime cat hero, 1:2 head-to-body ratio, 2D side-profile gameplay angle, clear limb and tail separation, printed 4-step color swatch bar on neutral gray background",
-    "outPath": "assets/raw/character_sheet.png",
+    "prompt": "Match the art style of the style reference. 2D game character reference sheet of a black anime cat hero, 1:2 head-to-body ratio, 2D side-profile gameplay angle, clear limb and tail separation, printed 4-step color swatch bar on neutral gray background",
+    "inputImages": ["<GAME_ROOT>/art/references/style.png"],
+    "outPath": "<GAME_ROOT>/art/raw/character_sheet.png",
     "model": "nano-banana-2.1",
     "resolution": "2K",
     "aspectRatio": "1:1"
@@ -85,15 +86,15 @@ If `image_generate` fails due to missing credentials or auth errors, stop immedi
 
 ### Step 2: Generate `4x4` chroma-key grids and normalize (`sprite_normalize`)
 
-Pass `assets/raw/character_sheet.png` in `inputImages` to `image_generate` to create uniform `4x4` animation grids on flat `#00FF00` bright green or `#FF00FF` magenta with no grid lines, borders, or text labels. For eight motions (`32` frames), generate two `4x4` grids (`4` motions each) and pass both in `filePaths` to `sprite_normalize`.
+Pass `<GAME_ROOT>/art/raw/character_sheet.png` in `inputImages` to `image_generate` to create uniform `4x4` animation grids on flat `#00FF00` bright green or `#FF00FF` magenta with no grid lines, borders, or text labels. For eight motions (`32` frames), generate two `4x4` grids (`4` motions each) and pass both in `filePaths` to `sprite_normalize`.
 
 ```json
 {
   "tool": "image_generate",
   "arguments": {
-    "prompt": "Keep the exact character identity and color swatches from the reference sheet. Uniform 4x4 2D sprite sheet grid on a flat unlit #00FF00 chroma-key background, no grid lines or labels, at least 15% empty #00FF00 margin inside every cell. Row 1: 4-frame idle breathing. Row 2: 4-frame walk cycle. Row 3: 4-frame run cycle. Row 4: 4-frame jump arc (crouch anticipation, upward launch, rising ascent, horizontal mid-air apex suspension).",
-    "inputImages": ["assets/raw/character_sheet.png"],
-    "outPath": "assets/raw/raw_grid_part1.png",
+    "prompt": "Keep the exact character identity and color swatches from the character sheet and the art style of the style reference. Uniform 4x4 2D sprite sheet grid on a flat unlit #00FF00 chroma-key background, no grid lines or labels, at least 15% empty #00FF00 margin inside every cell. Row 1: 4-frame idle breathing. Row 2: 4-frame walk cycle. Row 3: 4-frame run cycle. Row 4: 4-frame jump arc (crouch anticipation, upward launch, rising ascent, horizontal mid-air apex suspension).",
+    "inputImages": ["<GAME_ROOT>/art/raw/character_sheet.png", "<GAME_ROOT>/art/references/style.png"],
+    "outPath": "<GAME_ROOT>/art/raw/raw_grid_part1.png",
     "model": "nano-banana-2.1",
     "resolution": "1K",
     "aspectRatio": "1:1",
@@ -112,7 +113,7 @@ Then call `sprite_normalize` to strip chroma backgrounds, trim bleed, unmix frin
 {
   "tool": "sprite_normalize",
   "arguments": {
-    "filePaths": ["assets/raw/raw_grid_part1.png", "assets/raw/raw_grid_part2.png"],
+    "filePaths": ["<GAME_ROOT>/art/raw/raw_grid_part1.png", "<GAME_ROOT>/art/raw/raw_grid_part2.png"],
     "cols": 4,
     "rows": 4,
     "center": true,
@@ -129,12 +130,12 @@ Then call `sprite_normalize` to strip chroma backgrounds, trim bleed, unmix frin
       "sleep:24:27:100:pingpong",
       "attack:28:31:100:once"
     ],
-    "outPngPath": "assets/sprites/hero_cat.png",
-    "outJsonPath": "assets/sprites/hero_cat.json",
-    "outSpritePath": "assets/sprites/hero_cat.sprite",
-    "outAsepritePath": "assets/sprites/hero_cat.aseprite",
-    "outPreviewPath": "assets/previews/hero_cat_preview.png",
-    "outGifDir": "assets/previews/gifs"
+    "outPngPath": "<GAME_ROOT>/public/assets/sprites/hero_cat.png",
+    "outJsonPath": "<GAME_ROOT>/public/assets/sprites/hero_cat.json",
+    "outSpritePath": "<GAME_ROOT>/public/assets/sprites/hero_cat.sprite",
+    "outAsepritePath": "<GAME_ROOT>/art/sprites/hero_cat.aseprite",
+    "outPreviewPath": "<GAME_ROOT>/art/previews/hero_cat_preview.png",
+    "outGifDir": "<GAME_ROOT>/art/previews/gifs"
   }
 }
 ```
@@ -212,6 +213,8 @@ Pass the `.sprite` text (`dsl`) or `filePath` to `sprite_compile` with `outPngPa
 
 ---
 
-## Import into the game
+## Paths and import into the game
 
-Choose output paths in the game's asset directory. For Phaser, follow [phaser-web](../phaser-web/SKILL.md) and register the exported file in the game's preload list. For Godot, follow [godot-game](../godot-game/SKILL.md) and confirm the imported resource in the target scene.
+Every path passed to the `game-studio` tools must be absolute; the tools reject relative paths. In the examples, replace `<GAME_ROOT>` with the game repository's absolute root. Files the game loads go under `public/assets/` (Phaser) or `game/assets/` (Godot); raw generations, previews and DSL sources go under `<GAME_ROOT>/art/` so they never ship. See the folder layout in [vibe-game-developer](../vibe-game-developer/SKILL.md#asset-folders-and-paths) Start from the asset's row in the GDD *Asset manifest* (key, output file, size, tags) and set its status to `generated` once the tool report passes.
+
+For Phaser, follow [phaser-web](../phaser-web/SKILL.md) and register the exported file in the game's preload list. For Godot, follow [godot-game](../godot-game/SKILL.md) and confirm the imported resource in the target scene.
