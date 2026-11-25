@@ -129,39 +129,12 @@ Antigravity 대화에서 `/game-dev-studio`를 입력하면 **Game Dev Studio** 
 
 ```mermaid
 flowchart TD
-    Start["0. 시작 · /vibe-game-developer (템플릿 판별 및 작업 라우팅)"] --> Design["1. 기획 · game-design (GDD 작성: docs/game/GDD.md 또는 docs/GDD.md)"]
-
-    Design --> Engine{"2. 엔진 구현"}
-    Engine -->|"Phaser Web"| Phaser["phaser-web (장면·입력·저장·빌드)"]
-    Engine -->|"Godot Mobile · PC"| Godot["godot-game (장면·Autoload·플랫폼 서비스)"]
-
-    Design --> Visual{"3-A. 비주얼 에셋"}
-    Visual -->|"AI 2단계 (캐릭터·배경)"| Nano["nano-banana (image_generate)"]
-    Nano --> SpriteNorm["sprite-design (sprite_normalize → PNG·JSON)"]
-    Visual -->|"절차적 DSL (타일·투사체)"| SpriteDSL["sprite-design (sprite_compile → PNG·JSON)"]
-
-    Design --> Audio{"3-B. 오디오 에셋"}
-    Audio -->|"효과음"| ProcSFX["procedural-sfx (sfx_synthesize → WAV)"]
-    Audio -->|"절차적 BGM"| ProcMus["procedural-music (music_validate · synthesize → WAV)"]
-    Audio -->|"AI BGM · 노래"| Lyria["lyria (music_generate → WAV·MP3)"]
-
-    SpriteNorm --> Integrate["4. 에셋 연결 (Phaser: public/assets · Godot: game/assets)"]
-    SpriteDSL --> Integrate
-    ProcSFX --> Integrate
-    ProcMus --> Integrate
-    Lyria --> Integrate
-
-    Integrate --> Phaser
-    Integrate --> Godot
-
-    Phaser --> VerifyWeb["5-A. 검증 · phaser-web (npm run check · test:e2e) + game-dev-studio (Playtest · 주석 · GIF)"]
-    Godot --> VerifyGodot["5-B. 검증 · godot-game (F5 · integration.tscn · tools/validate.sh)"]
-
-    VerifyWeb -->|"버그 수정·다듬기"| Phaser
-    VerifyGodot -->|"버그 수정·다듬기"| Godot
-
-    VerifyWeb --> ShipWeb["6-A. 배포 · standalone / CrazyGames"]
-    VerifyGodot --> ShipGodot["6-B. 배포 · Google Play · ONE store · App Store / Steam · itch.io"]
+    A["1. 시작<br/>vibe-game-developer"] --> B["2. 기획<br/>game-design"]
+    B --> C["3. 구현<br/>phaser-web · godot-game"]
+    C --> D["4. 에셋 제작·연결<br/>sprite · sfx · music · AI 생성"]
+    D --> E["5. 플레이·검증"]
+    E -->|"버그 수정·다듬기"| C
+    E --> F["배포"]
 ```
 
 1. **템플릿을 선택하고 라우터로 시작합니다 (`vibe-game-developer`).** 브라우저 게임은 Phaser Web, Android·iOS 게임은 Godot Mobile, 데스크톱 게임은 Godot PC로 시작합니다. ([지원하는 게임 템플릿](#지원하는-게임-템플릿))
