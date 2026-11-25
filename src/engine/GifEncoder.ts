@@ -358,7 +358,7 @@ export interface ViewportCropBounds {
 
 /**
  * Detects the active rendered game viewport inside a potentially letterboxed or pillarboxed
- * canvas RGBA buffer. Ebitengine's WebGL canvas leaves letterbox bars transparent (`alpha === 0`)
+ * canvas RGBA buffer. A game canvas can leave letterbox bars transparent (`alpha === 0`)
  * or pure black (`rgb(0,0,0)`). Returns the tight `{ x, y, width, height }` of the game screen.
  */
 export function detectActiveViewportBounds(

@@ -18,14 +18,6 @@ import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
-import {
-  normalizeWorkspacePath,
-  discoverMainPackage,
-  resolveWasmExecJsPath,
-  compileGoWasm,
-  resolveCompiledWasm,
-} from './services/wasm-builder.mjs';
-
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const pluginRoot = path.resolve(__dirname, '..');
@@ -49,7 +41,7 @@ function createHttpError(message, statusCode, extra = {}) {
 
 export function getDefaultWorkspace() {
   if (process.env.PLAYTEST_WORKSPACE && process.env.PLAYTEST_WORKSPACE.trim()) {
-    return normalizeWorkspacePath(process.env.PLAYTEST_WORKSPACE.trim());
+    return path.resolve(expandTildeAndUri(process.env.PLAYTEST_WORKSPACE));
   }
   const cwd = path.resolve(process.cwd());
   const sidecarDir = path.join(pluginRoot, 'sidecars', 'studio');
@@ -59,94 +51,8 @@ export function getDefaultWorkspace() {
   return cwd;
 }
 
-function hasEnclosingGoMod(startDir) {
-  let current = path.resolve(startDir);
-  for (let depth = 0; depth < 6; depth++) {
-    if (fs.existsSync(path.join(current, 'go.mod'))) {
-      return true;
-    }
-    const parent = path.dirname(current);
-    if (parent === current) break;
-    current = parent;
-  }
-  return false;
-}
-
-export function discoverRunnableGoPackages(dirPath) {
-  if (!dirPath || !fs.existsSync(dirPath)) return [];
-  let stat;
-  try {
-    stat = fs.statSync(dirPath);
-  } catch {
-    return [];
-  }
-  if (!stat.isDirectory()) return [];
-
-  const packages = [];
-  try {
-    const rootEntries = fs.readdirSync(dirPath, { withFileTypes: true });
-    const hasRootGo = rootEntries.some(
-      (e) => e.isFile() && e.name.endsWith('.go') && !e.name.endsWith('_test.go')
-    );
-    if (hasRootGo) {
-      packages.push('.');
-    }
-
-    for (const parentFolder of ['cmd', 'examples']) {
-      const searchDir = path.join(dirPath, parentFolder);
-      if (fs.existsSync(searchDir) && fs.statSync(searchDir).isDirectory()) {
-        const subEntries = fs
-          .readdirSync(searchDir, { withFileTypes: true })
-          .filter((e) => e.isDirectory() && !e.name.startsWith('.'))
-          .sort((a, b) => a.name.localeCompare(b.name));
-
-        for (const sub of subEntries) {
-          const subDir = path.join(searchDir, sub.name);
-          const subFiles = fs.readdirSync(subDir, { withFileTypes: true });
-          if (
-            subFiles.some(
-              (f) => f.isFile() && f.name.endsWith('.go') && !f.name.endsWith('_test.go')
-            )
-          ) {
-            packages.push(`./${parentFolder}/${sub.name}`);
-          }
-        }
-      }
-    }
-  } catch {
-    // Ignore directory read errors during package scan
-  }
-  return packages;
-}
-
-export function resolveWorkspaceInfo(workspaceInput) {
-  const resolvedPath =
-    workspaceInput && typeof workspaceInput === 'string' && workspaceInput.trim()
-      ? normalizeWorkspacePath(workspaceInput)
-      : getDefaultWorkspace();
-
-  let pkg = '.';
-  try {
-    pkg = discoverMainPackage(resolvedPath);
-  } catch {
-    pkg = '.';
-  }
-
-  const packages = discoverRunnableGoPackages(resolvedPath);
-  const subPkgPath =
-    pkg && pkg !== '.' ? path.resolve(resolvedPath, pkg) : resolvedPath;
-  const hasGoMod =
-    fs.existsSync(path.join(resolvedPath, 'go.mod')) ||
-    fs.existsSync(path.join(subPkgPath, 'go.mod')) ||
-    hasEnclosingGoMod(subPkgPath);
-
-  return {
-    workspace: resolvedPath,
-    pkg,
-    packages: packages.length > 0 ? packages : [pkg],
-    projectPath: resolvedPath,
-    hasGoMod,
-  };
+export function resolveWorkspaceInfo(input) {
+  return { workspace: input ? path.resolve(expandTildeAndUri(input)) : getDefaultWorkspace() };
 }
 
 // Determine Antigravity app data directory portably with fail-fast validation
@@ -322,7 +228,6 @@ const MIME_TYPES = {
   '.mjs': 'application/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
-  '.wasm': 'application/wasm',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
@@ -343,19 +248,6 @@ const MIME_TYPES = {
   '.ico': 'image/x-icon',
 };
 
-function parseWorkspaceUri(uri) {
-  if (typeof uri !== 'string' || !uri.trim()) return null;
-  const trimmed = uri.trim();
-  if (trimmed.startsWith('file://')) {
-    try {
-      return path.resolve(fileURLToPath(trimmed));
-    } catch {
-      return null;
-    }
-  }
-  return path.resolve(trimmed);
-}
-
 function expandTildeAndUri(rawPath) {
   const homeDir = os.homedir();
   const trimmed = String(rawPath || '').trim();
@@ -367,203 +259,6 @@ function expandTildeAndUri(rawPath) {
     return fileURLToPath(trimmed);
   }
   return trimmed;
-}
-
-function getAllowedFsRoots(workspaceUris) {
-  const homeDir = os.homedir();
-  const allowedRoots = [
-    path.resolve(homeDir),
-    path.resolve(os.tmpdir()),
-    path.resolve(process.cwd()),
-    path.resolve(getDefaultWorkspace()),
-  ];
-  try {
-    allowedRoots.push(fs.realpathSync(os.tmpdir()));
-  } catch {
-    // ignore if tmpdir realpath fails
-  }
-  if (process.env.WORKSPACE_ROOT) {
-    allowedRoots.push(path.resolve(process.env.WORKSPACE_ROOT));
-  }
-  if (process.env.PLAYTEST_WORKSPACE) {
-    allowedRoots.push(path.resolve(process.env.PLAYTEST_WORKSPACE));
-  }
-  if (process.env.ANTIGRAVITY_EXECUTABLE_DATA_DIR) {
-    allowedRoots.push(path.resolve(process.env.ANTIGRAVITY_EXECUTABLE_DATA_DIR));
-  }
-  if (Array.isArray(workspaceUris)) {
-    for (const uri of workspaceUris) {
-      const parsed = parseWorkspaceUri(uri);
-      if (parsed) allowedRoots.push(parsed);
-    }
-  }
-  try {
-    allowedRoots.push(path.resolve(getAppDataDir()));
-  } catch {
-    // ignore if appDataDir is not configured
-  }
-  return allowedRoots;
-}
-
-function isWithinAllowedRoot(candidate, workspaceUris) {
-  const allowedRoots = getAllowedFsRoots(workspaceUris);
-  return allowedRoots.some(
-    (root) => candidate === root || candidate.startsWith(root + path.sep)
-  );
-}
-
-export function handleGetFsInfo(data = {}) {
-  const homeDir = os.homedir();
-  const downloadsDir = path.join(homeDir, 'Downloads');
-  const desktopDir = path.join(homeDir, 'Desktop');
-
-  const hostWorkspaceDir = parseWorkspaceUri(
-    data.workspace_uri || data.workspaceUri || data.workspace
-  );
-  const workspaceDir = hostWorkspaceDir || getDefaultWorkspace();
-
-  const sessionId = data.session_id || data.sessionId || getActiveSessionId();
-  let sessionDir = null;
-  if (sessionId && SESSION_ID_REGEX.test(sessionId)) {
-    try {
-      sessionDir = resolveSessionBrainDir(sessionId);
-    } catch {
-      sessionDir = null;
-    }
-  }
-
-  const defaultDir =
-    workspaceDir && fs.existsSync(workspaceDir)
-      ? workspaceDir
-      : fs.existsSync(downloadsDir)
-      ? downloadsDir
-      : homeDir;
-
-  return {
-    defaultDir,
-    downloadsDir,
-    desktopDir,
-    homeDir,
-    workspaceDir,
-    sessionDir,
-  };
-}
-
-export function handleGetFsList(data = {}) {
-  const rawDir = data.dir || data.directory || data.path || getDefaultWorkspace();
-  if (typeof rawDir !== 'string' || !rawDir.trim()) {
-    throw createHttpError('Missing or empty "dir" query parameter.', 400);
-  }
-  if (rawDir.includes('\0')) {
-    throw createHttpError('Invalid directory path: null byte detected.', 400);
-  }
-
-  const targetDir = path.resolve(expandTildeAndUri(rawDir));
-  if (!isWithinAllowedRoot(targetDir)) {
-    throw createHttpError(
-      `Access denied: directory "${targetDir}" must be within your home, workspace, or temp directory.`,
-      403
-    );
-  }
-
-  if (!fs.existsSync(targetDir)) {
-    throw createHttpError(`Directory not found: "${targetDir}"`, 404);
-  }
-
-  const realDir = fs.realpathSync(targetDir);
-  if (!isWithinAllowedRoot(realDir)) {
-    throw createHttpError(
-      `Access denied: resolved directory "${realDir}" is outside allowed user directories.`,
-      403
-    );
-  }
-
-  const dirStat = fs.statSync(realDir);
-  if (!dirStat.isDirectory()) {
-    throw createHttpError(`Path is not a directory: "${targetDir}"`, 400);
-  }
-
-  const filter = String(data.filter || 'all').toLowerCase();
-  let allowedExts;
-  if (typeof data.extensions === 'string' && data.extensions.trim()) {
-    allowedExts = new Set(
-      data.extensions
-        .split(',')
-        .map((e) => e.trim().toLowerCase())
-        .filter(Boolean)
-        .map((e) => (e.startsWith('.') ? e : `.${e}`))
-    );
-  } else {
-    allowedExts = new Set();
-  }
-
-  const entries = fs.readdirSync(realDir, { withFileTypes: true });
-  const directories = [];
-  const files = [];
-
-  for (const entry of entries) {
-    if (entry.name.startsWith('.') || entry.name === 'node_modules') {
-      continue;
-    }
-    const fullPath = path.join(realDir, entry.name);
-    let realEntryPath;
-    let stat;
-    try {
-      realEntryPath = fs.realpathSync(fullPath);
-      if (!isWithinAllowedRoot(realEntryPath)) continue;
-      stat = fs.statSync(realEntryPath);
-    } catch {
-      continue;
-    }
-
-    if (stat.isDirectory()) {
-      directories.push({
-        name: entry.name,
-        path: fullPath,
-        type: 'directory',
-        hasGoMod: fs.existsSync(path.join(fullPath, 'go.mod')),
-      });
-    } else if (stat.isFile()) {
-      const ext = path.extname(entry.name).toLowerCase();
-      if (allowedExts.has(ext)) {
-        files.push({
-          name: entry.name,
-          path: fullPath,
-          filePath: fullPath,
-          ext,
-          type: ext.slice(1),
-          size: stat.size,
-          modifiedTime: stat.mtimeMs,
-        });
-      }
-    }
-  }
-
-  directories.sort((a, b) => a.name.localeCompare(b.name));
-  files.sort((a, b) => a.name.localeCompare(b.name));
-
-  const packages = discoverRunnableGoPackages(realDir);
-  const hasGoMod =
-    fs.existsSync(path.join(realDir, 'go.mod')) ||
-    hasEnclosingGoMod(realDir) ||
-    packages.length > 0;
-  const defaultPkg = packages.length > 0 ? packages[0] : '.';
-  const parentCandidate = path.dirname(realDir);
-  const parentDir =
-    parentCandidate !== realDir && isWithinAllowedRoot(parentCandidate)
-      ? parentCandidate
-      : null;
-
-  return {
-    dir: realDir,
-    parentDir,
-    filter,
-    directories,
-    files,
-    hasGoMod,
-    packages: packages.length > 0 ? packages : ['.'],
-    defaultPkg,
-  };
 }
 
 // Parse JSON request body with strict byte-limit enforcement before buffering
@@ -726,492 +421,6 @@ async function deliverMessageToChat(sidecarApp, sessionId, title, messageContent
   });
 }
 
-export function buildRunnerHtml(params = {}) {
-  const buildId = params.buildId ? String(params.buildId) : '';
-  const runnerId = Number.parseInt(String(params.runnerId || '1'), 10) || 1;
-  const demoMode =
-    params.demo === '1' || params.demo === 'true' || params.demo === true;
-  const initialMuted =
-    params.muted === '1' || params.muted === 'true' || params.muted === true;
-  const captureIntervalMs =
-    Number.parseInt(String(params.captureIntervalMs || '40'), 10) || 40;
-
-  let wasmExecInline = '';
-  if (!demoMode) {
-    if (!buildId) {
-      throw createHttpError('Missing "buildId" query parameter for /api/playtest/runner.', 400);
-    }
-    resolveCompiledWasm(buildId);
-    const wasmExecPath = resolveWasmExecJsPath();
-    wasmExecInline = fs
-      .readFileSync(wasmExecPath, 'utf-8')
-      .replace(/<\/script/gi, '<\\/script');
-  }
-
-  const tokenSuffix = params.token ? `&token=${encodeURIComponent(String(params.token))}` : '';
-  const wasmBinaryUrl = demoMode
-    ? ''
-    : `/api/playtest/wasm?buildId=${encodeURIComponent(buildId)}${tokenSuffix}`;
-
-  return `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8" />
-  <title>Ebitengine Playtest Runner</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body {
-      width: 100%;
-      height: 100%;
-      background: #090D16;
-      overflow: hidden;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      user-select: none;
-    }
-    canvas {
-      display: block;
-      max-width: 100%;
-      max-height: 100%;
-      object-fit: contain;
-      image-rendering: pixelated;
-      outline: none;
-    }
-  </style>
-</head>
-<body tabindex="0">
-  <script>
-    (function() {
-      const runnerId = ${JSON.stringify(runnerId)};
-      const demoMode = ${JSON.stringify(demoMode)};
-      const wasmBinaryUrl = ${JSON.stringify(wasmBinaryUrl)};
-      let captureIntervalMs = ${JSON.stringify(captureIntervalMs)};
-      let lastCaptureTimeMs = -Infinity;
-      let isMuted = ${JSON.stringify(initialMuted)};
-
-      function postToParent(payload) {
-        if (window.parent && window.parent !== window) {
-          window.parent.postMessage(
-            Object.assign({ source: 'playtest-runner-child', runnerId: runnerId }, payload),
-            '*'
-          );
-        }
-      }
-
-      window.__RUNNER_CONFIG__ = {
-        runnerId: runnerId,
-        demoMode: demoMode,
-        wasmBinaryUrl: wasmBinaryUrl,
-        postToParent: postToParent
-      };
-
-      // 1. WebGL preserveDrawingBuffer: true Shim
-      const origGetContext = HTMLCanvasElement.prototype.getContext;
-      HTMLCanvasElement.prototype.getContext = function(type, attrs) {
-        if (type === 'webgl' || type === 'webgl2' || type === 'experimental-webgl') {
-          attrs = Object.assign({}, attrs || {}, { preserveDrawingBuffer: true });
-          window.__ACTIVE_GAME_CANVAS__ = this;
-        } else if (type === '2d' && !window.__ACTIVE_GAME_CANVAS__) {
-          window.__ACTIVE_GAME_CANVAS__ = this;
-        }
-        return origGetContext.call(this, type, attrs);
-      };
-
-      // 2. WebAudio Context Tracker for Mute & Pause Support
-      const audioContexts = [];
-      const OrigAudioContext = window.AudioContext || window.webkitAudioContext;
-      if (OrigAudioContext) {
-        const WrappedAudioContext = function(...args) {
-          const ctx = new OrigAudioContext(...args);
-          audioContexts.push(ctx);
-          if (isMuted || window.__PLAYTEST_PAUSED__) {
-            ctx.suspend().catch(function() {});
-          }
-          return ctx;
-        };
-        WrappedAudioContext.prototype = OrigAudioContext.prototype;
-        window.AudioContext = WrappedAudioContext;
-        if (window.webkitAudioContext) {
-          window.webkitAudioContext = WrappedAudioContext;
-        }
-      }
-
-      function syncAudioState() {
-        const shouldSuspend = isMuted || Boolean(window.__PLAYTEST_PAUSED__);
-        for (let i = 0; i < audioContexts.length; i++) {
-          const ctx = audioContexts[i];
-          if (ctx.state === 'closed') continue;
-          if (shouldSuspend && ctx.state === 'running') {
-            ctx.suspend().catch(function() {});
-          } else if (!shouldSuspend && ctx.state === 'suspended') {
-            ctx.resume().catch(function() {});
-          }
-        }
-      }
-
-      // 3. Zero-Encoding GPU Blit Ring Buffer for 10s DVR (250 frames @ 25 FPS)
-      const maxDvrSlots = 250;
-      const dvrSlots = new Array(maxDvrSlots);
-      let dvrWritePtr = 0;
-      let dvrCount = 0;
-
-      window.__PLAYTEST_GET_DVR_FRAMES__ = function() {
-        if (dvrCount === 0) return [];
-        const startSlot = dvrCount < maxDvrSlots ? 0 : dvrWritePtr;
-        const out = new Array(dvrCount);
-        for (let i = 0; i < dvrCount; i++) {
-          out[i] = dvrSlots[(startSlot + i) % maxDvrSlots];
-        }
-        return out;
-      };
-
-      function captureFrameSnapshot(timestampMs, force) {
-        if (!force && (timestampMs - lastCaptureTimeMs < captureIntervalMs)) {
-          return;
-        }
-        const canvas = window.__ACTIVE_GAME_CANVAS__ || document.querySelector('canvas');
-        if (!canvas || canvas.width <= 0 || canvas.height <= 0) {
-          return;
-        }
-        try {
-          let slot = dvrSlots[dvrWritePtr];
-          if (!slot) {
-            const c = document.createElement('canvas');
-            slot = {
-              canvas: c,
-              ctx: c.getContext('2d'),
-              width: 0,
-              height: 0,
-              timestampMs: 0
-            };
-            dvrSlots[dvrWritePtr] = slot;
-          }
-          const maxW = 480;
-          const scale = canvas.width > maxW ? maxW / canvas.width : 1;
-          const targetW = Math.max(64, Math.round(canvas.width * scale));
-          const targetH = Math.max(36, Math.round(canvas.height * scale));
-          if (slot.width !== targetW || slot.height !== targetH) {
-            slot.canvas.width = targetW;
-            slot.canvas.height = targetH;
-            slot.width = targetW;
-            slot.height = targetH;
-            if (slot.ctx) {
-              slot.ctx.imageSmoothingEnabled = false;
-            }
-          }
-          if (slot.ctx) {
-            slot.ctx.clearRect(0, 0, targetW, targetH);
-            slot.ctx.drawImage(canvas, 0, 0, targetW, targetH);
-          }
-          slot.timestampMs = timestampMs;
-          dvrWritePtr = (dvrWritePtr + 1) % maxDvrSlots;
-          if (dvrCount < maxDvrSlots) {
-            dvrCount++;
-          }
-          lastCaptureTimeMs = timestampMs;
-        } catch (err) {
-          // Ignore transient canvas snapshot errors
-        }
-      }
-
-      // 4. requestAnimationFrame Pause & DVR Hook
-      window.__PLAYTEST_PAUSED__ = false;
-      const pausedCallbacks = [];
-      const origRAF = window.requestAnimationFrame.bind(window);
-
-      window.requestAnimationFrame = function(callback) {
-        return origRAF(function(timestamp) {
-          if (window.__PLAYTEST_PAUSED__) {
-            pausedCallbacks.push(callback);
-            return;
-          }
-          callback(timestamp);
-          captureFrameSnapshot(timestamp, false);
-        });
-      };
-
-      // 5. Console & Go Panic Ring Buffer Hook
-      function formatArgs(args) {
-        return Array.from(args).map(function(a) {
-          if (typeof a === 'string') return a;
-          if (a instanceof Error) return a.stack || a.message;
-          try { return JSON.stringify(a); } catch (e) { return String(a); }
-        }).join(' ');
-      }
-
-      const origLog = console.log.bind(console);
-      const origWarn = console.warn.bind(console);
-      const origError = console.error.bind(console);
-
-      console.log = function(...args) {
-        origLog(...args);
-        const text = formatArgs(args);
-        postToParent({ type: 'LOG', level: 'log', text: text });
-        if (text.startsWith('panic:') || text.includes('runtime error:')) {
-          postToParent({ type: 'PANIC', message: text });
-        }
-      };
-
-      console.warn = function(...args) {
-        origWarn(...args);
-        postToParent({ type: 'LOG', level: 'warn', text: formatArgs(args) });
-      };
-
-      console.error = function(...args) {
-        origError(...args);
-        const text = formatArgs(args);
-        postToParent({ type: 'LOG', level: 'error', text: text });
-        if (text.startsWith('panic:') || text.includes('runtime error:')) {
-          postToParent({ type: 'PANIC', message: text });
-        }
-      };
-
-      window.addEventListener('error', function(e) {
-        const msg = e.error ? (e.error.stack || e.error.message) : e.message;
-        postToParent({ type: 'PANIC', message: 'Uncaught WASM Error: ' + msg });
-      });
-
-      window.addEventListener('unhandledrejection', function(e) {
-        const msg = e.reason ? (e.reason.stack || e.reason.message || String(e.reason)) : 'Unknown rejection';
-        postToParent({ type: 'PANIC', message: 'Unhandled WASM Rejection: ' + msg });
-      });
-
-      // 6. Capture-Phase Hotkey & Scroll-Lock Listener
-      window.addEventListener('keydown', function(e) {
-        if (e.code === 'F8' || e.code === 'Backquote') {
-          e.preventDefault();
-          e.stopPropagation();
-          captureFrameSnapshot(performance.now(), true);
-          postToParent({ type: 'TOGGLE_PAUSE' });
-          return;
-        }
-        if (
-          e.code === 'Space' ||
-          e.code === 'ArrowUp' ||
-          e.code === 'ArrowDown' ||
-          e.code === 'ArrowLeft' ||
-          e.code === 'ArrowRight' ||
-          e.code === 'Tab'
-        ) {
-          e.preventDefault();
-        }
-      }, { capture: true });
-
-      // 7. Focus & Audio Unlock Tracking
-      window.addEventListener('focus', function() {
-        postToParent({ type: 'FOCUS_CHANGE', focused: true });
-        syncAudioState();
-      });
-      window.addEventListener('blur', function() {
-        postToParent({ type: 'FOCUS_CHANGE', focused: false });
-      });
-      window.addEventListener('pointerdown', function() {
-        window.focus();
-        document.body.focus();
-        const canvas = window.__ACTIVE_GAME_CANVAS__ || document.querySelector('canvas');
-        if (canvas && typeof canvas.focus === 'function') {
-          canvas.focus();
-        }
-        postToParent({ type: 'FOCUS_CHANGE', focused: true });
-        syncAudioState();
-      }, { capture: true });
-
-      // 8. Parent Message Receiver
-      window.addEventListener('message', function(event) {
-        const msg = event.data;
-        if (!msg || msg.source !== 'playtest-runner-parent' || msg.runnerId !== runnerId) {
-          return;
-        }
-
-        if (msg.type === 'SET_PAUSED') {
-          const nextPaused = Boolean(msg.paused);
-          const wasPaused = Boolean(window.__PLAYTEST_PAUSED__);
-          if (nextPaused && !wasPaused) {
-            captureFrameSnapshot(performance.now(), true);
-          }
-          window.__PLAYTEST_PAUSED__ = nextPaused;
-          syncAudioState();
-          if (wasPaused && !nextPaused && pausedCallbacks.length > 0) {
-            const pending = pausedCallbacks.splice(0, pausedCallbacks.length);
-            origRAF(function(ts) {
-              for (let i = 0; i < pending.length; i++) {
-                pending[i](ts);
-              }
-              captureFrameSnapshot(ts, false);
-            });
-          }
-          return;
-        }
-
-        if (msg.type === 'SET_MUTED') {
-          isMuted = Boolean(msg.muted);
-          syncAudioState();
-          return;
-        }
-
-        if (msg.type === 'CAPTURE_NOW') {
-          captureFrameSnapshot(performance.now(), true);
-          return;
-        }
-
-        if (msg.type === 'DISPATCH_KEY') {
-          const code = msg.code || 'Space';
-          const key = msg.key || ' ';
-          const type = msg.keyEventType || 'keydown';
-          const keyCodeMap = {
-            ArrowUp: 38, ArrowDown: 40, ArrowLeft: 37, ArrowRight: 39,
-            Space: 32, KeyW: 87, KeyA: 65, KeyS: 83, KeyD: 68,
-            KeyZ: 90, KeyX: 88, Enter: 13
-          };
-          const keyCode = keyCodeMap[code] || key.toUpperCase().charCodeAt(0) || 0;
-          const ev = new KeyboardEvent(type, {
-            code: code,
-            key: key,
-            keyCode: keyCode,
-            which: keyCode,
-            bubbles: true,
-            cancelable: true
-          });
-          const canvas = window.__ACTIVE_GAME_CANVAS__ || document.querySelector('canvas');
-          if (canvas) {
-            canvas.focus();
-            canvas.dispatchEvent(ev);
-          } else {
-            window.dispatchEvent(ev);
-          }
-          return;
-        }
-
-        if (msg.type === 'FOCUS_GAME') {
-          window.focus();
-          document.body.focus();
-          const canvas = window.__ACTIVE_GAME_CANVAS__ || document.querySelector('canvas');
-          if (canvas && typeof canvas.focus === 'function') {
-            canvas.focus();
-          }
-          postToParent({ type: 'FOCUS_CHANGE', focused: true });
-          syncAudioState();
-          return;
-        }
-      });
-    })();
-  </script>
-  <script>
-${wasmExecInline}
-  </script>
-  <script>
-    (async function() {
-      const cfg = window.__RUNNER_CONFIG__;
-      if (!cfg) return;
-      const postToParent = cfg.postToParent;
-
-      if (cfg.demoMode) {
-        const canvas = document.createElement('canvas');
-        canvas.width = 640;
-        canvas.height = 360;
-        document.body.appendChild(canvas);
-        const ctx = canvas.getContext('2d');
-
-        const keys = {};
-        window.addEventListener('keydown', function(e) { keys[e.code] = true; });
-        window.addEventListener('keyup', function(e) { keys[e.code] = false; });
-
-        let playerX = 140;
-        let playerY = 230;
-        let velY = 0;
-        let tick = 0;
-
-        console.log('[Playtest Calibration Scene] Ready (640x360 @ 60fps). Use WASD/Arrows + Space.');
-        postToParent({ type: 'READY' });
-
-        function step() {
-          tick++;
-          const speed = 3.5;
-          if (keys['ArrowLeft'] || keys['KeyA']) playerX = Math.max(24, playerX - speed);
-          if (keys['ArrowRight'] || keys['KeyD']) playerX = Math.min(616, playerX + speed);
-          if ((keys['Space'] || keys['ArrowUp'] || keys['KeyW'] || keys['KeyZ']) && playerY >= 230) {
-            velY = -9.5;
-          }
-          playerY += velY;
-          if (playerY < 230) {
-            velY += 0.48;
-          } else {
-            playerY = 230;
-            velY = 0;
-          }
-
-          ctx.fillStyle = '#0F172A';
-          ctx.fillRect(0, 0, 640, 360);
-          ctx.strokeStyle = 'rgba(56, 189, 248, 0.12)';
-          ctx.lineWidth = 1;
-          for (let x = 0; x < 640; x += 32) {
-            ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 360); ctx.stroke();
-          }
-          for (let y = 0; y < 360; y += 32) {
-            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(640, y); ctx.stroke();
-          }
-
-          ctx.fillStyle = '#1E293B';
-          ctx.fillRect(0, 262, 640, 98);
-          ctx.fillStyle = '#38BDF8';
-          ctx.fillRect(0, 262, 640, 3);
-
-          const obsX = 480 - ((tick * 2.4) % 420);
-          ctx.fillStyle = '#F43F5E';
-          ctx.fillRect(obsX, 230, 32, 32);
-          ctx.strokeStyle = '#FACC15';
-          ctx.strokeRect(obsX + 6, 224, 32, 32);
-
-          ctx.fillStyle = '#22C55E';
-          ctx.fillRect(playerX - 16, playerY - 32, 32, 32);
-          ctx.fillStyle = '#FFFFFF';
-          ctx.fillRect(playerX + 4, playerY - 24, 6, 6);
-
-          ctx.fillStyle = '#E2E8F0';
-          ctx.font = '600 13px ui-monospace, SFMono-Regular, Menlo, monospace';
-          ctx.fillText('EBITENGINE QA CALIBRATION LOOP | TICK #' + tick, 16, 26);
-          ctx.fillStyle = '#94A3B8';
-          ctx.font = '12px ui-monospace, SFMono-Regular, Menlo, monospace';
-          ctx.fillText('POS: (' + Math.round(playerX) + ', ' + Math.round(playerY) + ')  OBS_X: ' + Math.round(obsX), 16, 46);
-
-          window.requestAnimationFrame(step);
-        }
-        window.requestAnimationFrame(step);
-        return;
-      }
-
-      if (typeof window.Go !== 'function') {
-        postToParent({
-          type: 'PANIC',
-          message: 'Go WASM runtime (window.Go) was not defined by wasm_exec.js.'
-        });
-        return;
-      }
-
-      try {
-        const res = await fetch(cfg.wasmBinaryUrl, { cache: 'no-store' });
-        if (!res.ok) {
-          throw new Error('Failed to fetch WASM binary (HTTP ' + res.status + ')');
-        }
-        const wasmBytes = await res.arrayBuffer();
-        const go = new window.Go();
-        const result = await WebAssembly.instantiate(wasmBytes, go.importObject);
-        postToParent({ type: 'READY' });
-        await go.run(result.instance);
-      } catch (err) {
-        const errMsg = err instanceof Error ? (err.stack || err.message) : String(err);
-        postToParent({
-          type: 'PANIC',
-          message: 'Failed to instantiate or run Go WASM binary: ' + errMsg
-        });
-      }
-    })();
-  </script>
-</body>
-</html>`;
-}
-
 export async function processSendToChat(body, sidecarApp = null) {
   const sessionId = body.session_id || body.sessionId || getActiveSessionId() || 'standalone';
   const { filename, note, consoleLogs, metadata, buildError, workspace, pkg } = body;
@@ -1229,16 +438,16 @@ export async function processSendToChat(body, sidecarApp = null) {
     }
   }
 
-  // Payload (B): Compiler build error
+  // Payload (B): Playtest error
   if (typeof buildError === 'string' && buildError.trim().length > 0) {
     const metaObj = metadata && typeof metadata === 'object' ? metadata : {};
     const effectiveWorkspace = workspace || metaObj.workspace || getDefaultWorkspace();
-    const effectivePkg = pkg || metaObj.pkg || metaObj.package || '.';
+    const effectivePkg = pkg || metaObj.pkg || metaObj.package;
 
     const lines = [
-      '### 🚨 Ebitengine WASM Build Error',
+      '### 🚨 Phaser Playtest Error',
       '',
-      `**Workspace**: \`${effectiveWorkspace}\` | **Package**: \`${effectivePkg}\``,
+      `**Workspace**: \`${effectiveWorkspace}\`${effectivePkg ? ` | **Package**: \`${effectivePkg}\`` : ''}`,
     ];
 
     if (typeof note === 'string' && note.trim()) {
@@ -1251,7 +460,7 @@ export async function processSendToChat(body, sidecarApp = null) {
     await deliverMessageToChat(
       sidecarApp,
       sessionId,
-      'Playtest WASM Build Error',
+      'Phaser Playtest Error',
       messageContent
     );
 
@@ -1361,7 +570,7 @@ export async function processSendToChat(body, sidecarApp = null) {
 
     const metaObj = metadata && typeof metadata === 'object' ? metadata : {};
     const effectiveWorkspace = metaObj.workspace || workspace || getDefaultWorkspace();
-    const effectivePkg = metaObj.pkg || metaObj.package || pkg || '.';
+    const effectivePkg = metaObj.pkg || metaObj.package || pkg;
     const effectiveFrameOffset =
       metaObj.frameOffset ?? metaObj.timestamp ?? metaObj.frame ?? 'live';
     const effectiveResolution =
@@ -1376,7 +585,7 @@ export async function processSendToChat(body, sidecarApp = null) {
 
     lines.push(
       '',
-      `**Workspace**: \`${effectiveWorkspace}\` | **Package**: \`${effectivePkg}\` | **Frame Offset**: \`${effectiveFrameOffset}\` | **Resolution**: \`${effectiveResolution}\``
+      `**Workspace**: \`${effectiveWorkspace}\`${effectivePkg ? ` | **Package**: \`${effectivePkg}\`` : ''} | **Frame Offset**: \`${effectiveFrameOffset}\` | **Resolution**: \`${effectiveResolution}\``
     );
 
     let formattedLogs = '';
@@ -1390,7 +599,7 @@ export async function processSendToChat(body, sidecarApp = null) {
     }
 
     if (formattedLogs.length > 0) {
-      lines.push('', '### Captured WASM Console / Stderr', '```text', formattedLogs, '```');
+      lines.push('', '### Captured Game Console', '```text', formattedLogs, '```');
     }
 
     const messageContent = lines.join('\n');
@@ -1410,7 +619,7 @@ export async function processSendToChat(body, sidecarApp = null) {
   }
 
   throw createHttpError(
-    'Missing "image" (screenshot) or "buildError" (compiler traceback) in send-to-chat request.',
+    'Missing "image" (screenshot) or "buildError" (playtest error details) in send-to-chat request.',
     400
   );
 }
@@ -1440,10 +649,6 @@ export function configureSidecarApp(app, ResponseClass) {
         JSON.stringify({
           error: err.message,
           statusCode: status,
-          ...(err.compilerOutput !== undefined ? { compilerOutput: err.compilerOutput } : {}),
-          ...(err.workspace !== undefined ? { workspace: err.workspace } : {}),
-          ...(err.pkg !== undefined ? { pkg: err.pkg } : {}),
-          ...(err.exitCode !== undefined ? { exitCode: err.exitCode } : {}),
         }),
         {
           contentType: 'application/json; charset=utf-8',
@@ -1531,82 +736,11 @@ export function configureSidecarApp(app, ResponseClass) {
     'POST'
   );
 
-  // On-demand Go WASM compiler
-  app.api(
-    '/api/playtest/build',
-    wrapApi((data) =>
-      compileGoWasm({
-        workspace: data.workspace,
-        pkg: data.pkg,
-      })
-    ),
-    'POST'
-  );
-
-  // Compiled WASM binary stream
-  app.api(
-    '/api/playtest/wasm',
-    wrapApi((data) => {
-      const record = resolveCompiledWasm(data.buildId);
-      const buf = fs.readFileSync(record.wasmPath);
-      return new ResponseClass(buf, {
-        contentType: 'application/wasm',
-        headers: {
-          'Cache-Control': 'no-store',
-        },
-      });
-    }),
-    'GET'
-  );
-
-  // Go WASM JS runtime
-  app.api(
-    '/api/playtest/wasm_exec.js',
-    wrapApi(() => {
-      const wasmExecPath = resolveWasmExecJsPath();
-      const content = fs.readFileSync(wasmExecPath, 'utf-8');
-      return new ResponseClass(content, {
-        contentType: 'application/javascript; charset=utf-8',
-        headers: {
-          'Cache-Control': 'no-store',
-        },
-      });
-    }),
-    'GET'
-  );
-
-  // Playtest Runner page
-  app.api(
-    '/api/playtest/runner',
-    wrapApi((data) => {
-      const runnerHtml = buildRunnerHtml(data);
-      return new ResponseClass(runnerHtml, {
-        contentType: 'text/html; charset=utf-8',
-        headers: {
-          'Cache-Control': 'no-store, no-cache, must-revalidate',
-        },
-      });
-    }),
-    'GET'
-  );
-
   // Send Bug / Build Error to active Antigravity conversation
   app.api(
     '/api/send-to-chat',
     wrapApi((data) => processSendToChat(data, app)),
     'POST'
-  );
-
-  // Filesystem browsing APIs (Open Project modal)
-  app.api(
-    '/api/fs/info',
-    wrapApi((data) => handleGetFsInfo(data)),
-    'GET'
-  );
-  app.api(
-    '/api/fs/list',
-    wrapApi((data) => handleGetFsList(data)),
-    'GET'
   );
 
   return app;
@@ -1631,7 +765,7 @@ function applySecurityAndCorsHeaders(req, res) {
   res.setHeader('Access-Control-Allow-Headers', '*');
   res.setHeader(
     'Content-Security-Policy',
-    "default-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' data: blob:; frame-ancestors 'self' vscode-webview: sidecar:;"
+    "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob:; frame-src 'self' http://localhost:* http://127.0.0.1:*; frame-ancestors 'self' vscode-webview: sidecar:;"
   );
   res.setHeader('X-Content-Type-Options', 'nosniff');
 }
@@ -1680,7 +814,6 @@ export async function handleRequest(req, res) {
 
   const parsedUrl = new URL(req.url || '/', `http://${req.headers.host || '127.0.0.1'}`);
   const pathname = parsedUrl.pathname;
-  const searchParams = parsedUrl.searchParams;
 
   try {
     if ((pathname === '/api/health' || pathname === '/api/status') && req.method === 'GET') {
@@ -1721,124 +854,9 @@ export async function handleRequest(req, res) {
       return;
     }
 
-    if (pathname === '/api/playtest/build' && req.method === 'POST') {
-      const body = await parseJsonBody(req);
-      try {
-        const result = await compileGoWasm({
-          workspace: body.workspace,
-          pkg: body.pkg,
-        });
-        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-        res.end(JSON.stringify(result));
-      } catch (err) {
-        if (err.statusCode === 422) {
-          res.writeHead(422, { 'Content-Type': 'application/json; charset=utf-8' });
-          res.end(
-            JSON.stringify({
-              error: err.message,
-              compilerOutput: err.compilerOutput,
-              workspace: err.workspace,
-              pkg: err.pkg,
-              exitCode: err.exitCode,
-            })
-          );
-          return;
-        }
-        throw err;
-      }
-      return;
-    }
-
-    if (pathname === '/api/playtest/wasm' && (req.method === 'GET' || req.method === 'HEAD')) {
-      const buildId = searchParams.get('buildId') || undefined;
-      const record = resolveCompiledWasm(buildId);
-      const stat = fs.statSync(record.wasmPath);
-
-      res.writeHead(200, {
-        'Content-Type': 'application/wasm',
-        'Content-Length': stat.size,
-        'Cache-Control': 'no-store',
-      });
-      if (req.method === 'HEAD') {
-        res.end();
-        return;
-      }
-
-      const stream = fs.createReadStream(record.wasmPath);
-      stream.on('error', (err) => {
-        console.error('[playtest-studio] Error streaming wasm:', err);
-        if (!res.headersSent) {
-          res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
-        }
-        if (!res.writableEnded) {
-          res.end(JSON.stringify({ error: err.message }));
-        }
-      });
-      stream.pipe(res);
-      return;
-    }
-
-    if (
-      pathname === '/api/playtest/wasm_exec.js' &&
-      (req.method === 'GET' || req.method === 'HEAD')
-    ) {
-      const wasmExecPath = resolveWasmExecJsPath();
-      const stat = fs.statSync(wasmExecPath);
-
-      res.writeHead(200, {
-        'Content-Type': 'application/javascript; charset=utf-8',
-        'Content-Length': stat.size,
-        'Cache-Control': 'no-store',
-      });
-      if (req.method === 'HEAD') {
-        res.end();
-        return;
-      }
-
-      const stream = fs.createReadStream(wasmExecPath);
-      stream.on('error', (err) => {
-        console.error('[playtest-studio] Error streaming wasm_exec.js:', err);
-        if (!res.headersSent) {
-          res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
-        }
-        if (!res.writableEnded) {
-          res.end(JSON.stringify({ error: err.message }));
-        }
-      });
-      stream.pipe(res);
-      return;
-    }
-
-    if (pathname === '/api/playtest/runner' && req.method === 'GET') {
-      const queryObj = Object.fromEntries(searchParams.entries());
-      const runnerHtml = buildRunnerHtml(queryObj);
-      res.writeHead(200, {
-        'Content-Type': 'text/html; charset=utf-8',
-        'Cache-Control': 'no-store, no-cache, must-revalidate',
-      });
-      res.end(runnerHtml);
-      return;
-    }
-
     if (pathname === '/api/send-to-chat' && req.method === 'POST') {
       const body = await parseJsonBody(req, MAX_CHAT_BODY_BYTES);
       const result = await processSendToChat(body, null);
-      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-      res.end(JSON.stringify(result));
-      return;
-    }
-
-    if (pathname === '/api/fs/info' && req.method === 'GET') {
-      const queryObj = Object.fromEntries(searchParams.entries());
-      const result = handleGetFsInfo(queryObj);
-      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-      res.end(JSON.stringify(result));
-      return;
-    }
-
-    if (pathname === '/api/fs/list' && req.method === 'GET') {
-      const queryObj = Object.fromEntries(searchParams.entries());
-      const result = handleGetFsList(queryObj);
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
       res.end(JSON.stringify(result));
       return;

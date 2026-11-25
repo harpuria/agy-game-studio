@@ -1,11 +1,6 @@
 ---
 name: sprite-design
-description: >
-  2D game sprite design, chroma-key grid normalization, and procedural .sprite
-  DSL workflow using the game-studio MCP server. Covers sprite_inspect,
-  sprite_compile, sprite_normalize, sprite_extract_palette, and image_generate
-  to export baked .png, .json, .aseprite, and .sprite assets for //go:embed
-  playback in Ebitengine.
+description: Design, inspect, compile and normalize sprite sheets, animations and palettes for Phaser and Godot.
 license: Apache-2.0
 metadata:
   category: game-dev
@@ -16,7 +11,7 @@ metadata:
 
 # 2D sprite design, normalization, and frame animation
 
-`sprite-design` turns character designs and procedural `.sprite` rules into baked, game-ready 2D sprite assets (`.png`, `.json`, `.aseprite`, and `.sprite`) using the **`game-studio` MCP server**, then loads them at 60 FPS in Ebitengine via `//go:embed` without heap allocations in `Draw()`.
+`sprite-design` turns character designs and procedural `.sprite` rules into baked, game-ready 2D sprite assets (`.png`, `.json`, `.aseprite`, and `.sprite`) using the **`game-studio` MCP server**.
 
 - **`.sprite` container and procedural DSL spec**: [`references/dsl-reference.md`](references/dsl-reference.md)
 - **Binary Aseprite and `.gpl` palette spec**: [`references/aseprite_format.md`](references/aseprite_format.md)
@@ -30,7 +25,6 @@ metadata:
 | **`vibe-game-developer`** | Orchestrates end-to-end game builds and delegates character and tileset production to `sprite-design`. |
 | **`game-design`** | Defines player mechanics, animation tag budgets, hitbox timing, and camera projection before sprite creation. |
 | **`nano-banana`** | Generates the Step 1 character reference sheet and raw Step 2 `4x4` chroma-key grids via `image_generate`. |
-| **`ebitengineer`** | Embeds baked `.png`/`.json` or `.aseprite` outputs via `//go:embed` and drives `AnimationController` inside `Update()` and `Draw()`. |
 
 ---
 
@@ -135,10 +129,10 @@ Then call `sprite_normalize` to strip chroma backgrounds, trim bleed, unmix frin
       "sleep:24:27:100:pingpong",
       "attack:28:31:100:once"
     ],
-    "outPngPath": "internal/assets/sprites/hero_cat.png",
-    "outJsonPath": "internal/assets/sprites/hero_cat.json",
+    "outPngPath": "assets/sprites/hero_cat.png",
+    "outJsonPath": "assets/sprites/hero_cat.json",
     "outSpritePath": "assets/sprites/hero_cat.sprite",
-    "outAsepritePath": "internal/assets/sprites/hero_cat.aseprite",
+    "outAsepritePath": "assets/sprites/hero_cat.aseprite",
     "outPreviewPath": "assets/previews/hero_cat_preview.png",
     "outGifDir": "assets/previews/gifs"
   }
@@ -218,56 +212,6 @@ Pass the `.sprite` text (`dsl`) or `filePath` to `sprite_compile` with `outPngPa
 
 ---
 
-## Baking, `//go:embed`, and zero-allocation Ebitengine integration
+## Import into the game
 
-Bake final `.png` + `.json` manifests (or `.aseprite` binaries) into `internal/assets/sprites/` via `sprite_compile` or `sprite_normalize`, embed them in Go using `//go:embed`, and pre-slice every cell once at startup so `Draw()` never calls `SubImage` or allocates `ebiten.DrawImageOptions`:
-
-```go
-package assets
-
-import (
-	"bytes"
-	_ "embed"
-	"fmt"
-	"image"
-	_ "image/png"
-
-	"github.com/hajimehoshi/ebiten/v2"
-)
-
-//go:embed sprites/hero_cat.png
-var heroCatPNG []byte
-
-//go:embed sprites/hero_cat.json
-var HeroCatJSON []byte
-
-func LoadEmbeddedImage(raw []byte, label string) (*ebiten.Image, error) {
-	img, _, err := image.Decode(bytes.NewReader(raw))
-	if err != nil {
-		return nil, fmt.Errorf("assets: decode %s: %w", label, err)
-	}
-	return ebiten.NewImageFromImage(img), nil
-}
-```
-
-Slice the decoded `*ebiten.Image` once at `Boot` (using either a grid slicer `NewGridSpriteSheet` + `AnimationController` or `SolarLune/goaseprite` over the exported JSON manifest as shown in [`references/aseprite_format.md`](references/aseprite_format.md)):
-
-```go
-sheet, err := NewGridSpriteSheet(atlasImage, 256, 256)
-if err != nil {
-	return nil, err
-}
-ctrl := NewAnimationController(sheet)
-if err := ctrl.AddTag("idle", 0, 3, 100*time.Millisecond, LoopPingPong); err != nil {
-	return nil, err
-}
-if err := ctrl.AddTagWithIntro("run", 8, 9, 11, 100*time.Millisecond, LoopForward); err != nil {
-	return nil, err
-}
-if err := ctrl.AddTag("attack", 28, 31, 60*time.Millisecond, LoopOnce); err != nil {
-	return nil, err
-}
-if err := ctrl.Play("idle"); err != nil {
-	return nil, fmt.Errorf("play initial idle tag: %w", err)
-}
-```
+Choose output paths in the game's asset directory. For Phaser, follow [phaser-web](../phaser-web/SKILL.md) and register the exported file in the game's preload list. For Godot, follow [godot-game](../godot-game/SKILL.md) and confirm the imported resource in the target scene.

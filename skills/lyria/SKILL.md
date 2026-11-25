@@ -1,11 +1,6 @@
 ---
 name: lyria
-description: >
-  Generate 44.1 kHz stereo music, full songs with lyrics, and instrumental
-  game soundtracks from text prompts or reference images using Google Lyria
-  models (lyria-3.5, lyria-3-clip-preview, lyria-3-pro-preview) via the
-  game-studio MCP music_generate tool. Bakes .wav or .mp3 audio for //go:embed
-  playback in Ebitengine.
+description: Generate game soundtracks, lyrics and music from reference images with the Lyria music_generate tool.
 license: Apache-2.0
 metadata:
   category: media
@@ -88,7 +83,7 @@ Consult the reference cards in `references/` for model limits, timing controls, 
   "tool": "music_generate",
   "arguments": {
     "prompt": "Atmospheric synthwave exploration theme at 110 BPM in D minor with warm analog pads and clean low-end. Instrumental only, no vocals.",
-    "outPath": "internal/assets/music/stage_theme.wav",
+    "outPath": "assets/music/stage_theme.wav",
     "model": "lyria-3.5",
     "format": "wav",
     "apiMode": "interactions",
@@ -106,7 +101,7 @@ Consult the reference cards in `references/` for model limits, timing controls, 
   "tool": "music_generate",
   "arguments": {
     "prompt": "An energetic indie rock title theme with driving drums and soaring vocals at 128 BPM in G Major",
-    "outPath": "internal/assets/music/title_anthem.mp3",
+    "outPath": "assets/music/title_anthem.mp3",
     "model": "lyria-3.5",
     "outLyricsPath": "assets/music/title_anthem_lyrics.txt"
   }
@@ -134,7 +129,7 @@ Consult the reference cards in `references/` for model limits, timing controls, 
   "arguments": {
     "prompt": "Ambient relaxing soundscape matching the mood of this landscape. Instrumental only, no vocals.",
     "inputImages": ["assets/art/concept_landscape.png"],
-    "outPath": "internal/assets/music/landscape_theme.mp3",
+    "outPath": "assets/music/landscape_theme.mp3",
     "model": "lyria-3-pro-preview"
   }
 }
@@ -142,32 +137,10 @@ Consult the reference cards in `references/` for model limits, timing controls, 
 
 ---
 
-## Baking, `//go:embed`, and Ebitengine integration
+## Import into the game
 
-Bake final `.wav` or `.mp3` files into `internal/assets/music/` using `music_generate` and embed them into your Go binary via `//go:embed`. Keep two Ebitengine rules in mind:
+Choose output paths in the game's asset directory. For Phaser, follow [phaser-web](../phaser-web/SKILL.md) and register the exported file in the game's preload list. For Godot, follow [godot-game](../godot-game/SKILL.md) and confirm the imported resource in the target scene.
 
-- **Prefer `.wav` (`lyria-3.5` + `interactions`) for gapless loops**: MP3 encoding introduces priming padding (`~1,152` samples) that can click at loop seams, whereas `.wav` decodes cleanly for sample-exact `audio.NewInfiniteLoop`. Reserve `.mp3` for title themes, one-off boss intros, or endings (or trim decoded PCM before looping).
-- **Enforce 4-byte PCM alignment (`&^ 3`)**: Share a single `44100` Hz `*audio.Context`, decode embedded `.wav` (`ebiten/v2/audio/wav`) or `.mp3` (`ebiten/v2/audio/mp3`) once at `Boot`, and mask byte lengths and seek offsets with `&^ 3`:
-
-```go
-//go:embed assets/music/stage_theme.wav
-var stageThemeWAV []byte
-
-// Decode once at Boot, align length to 4-byte stereo frame boundary (&^ 3)
-stream, err := wav.DecodeWithSampleRate(audioCtx.SampleRate(), bytes.NewReader(stageThemeWAV))
-if err != nil {
-	return fmt.Errorf("audio: decode stage_theme.wav: %w", err)
-}
-pcm, err := io.ReadAll(stream)
-if err != nil {
-	return fmt.Errorf("audio: read stage_theme PCM: %w", err)
-}
-aligned := int64(len(pcm)) &^ 3
-loop := audio.NewInfiniteLoop(bytes.NewReader(pcm[:aligned]), aligned)
-player, err := audioCtx.NewPlayer(loop)
-```
-
----
 
 ## Prompting best practices
 

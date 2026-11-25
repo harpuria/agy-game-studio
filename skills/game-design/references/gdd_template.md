@@ -4,7 +4,7 @@
 > **Target 2D Genre**: [Side-Scroller Action/Platformer | Top-Down RPG/Adventure | Roguelike/Bullet-Heaven | Puzzle | Shmup | Turn-Based Tactics | Isometric 2:1 Strategy | Visual Novel]
 > **Camera Projection & Spatial Model**: [2D Side-Profile | 3/4 Top-Down Orthographic | Isometric 2:1 (`26.565 deg`) | Front-Facing Orthographic]
 > **Simulation Model**: [Real-Time Continuous (`60 TPS` fixed timestep) | Turn-Based Phases | Discrete Grid-Step | Event/Dialogue-Driven]
-> **Target Platform**: Desktop (macOS/Windows/Linux) & WebAssembly (Browser / Hosted Server)
+> **Target Platform**: [Phaser Web | Godot Mobile | Godot PC] — [target devices and storefront]
 > **Virtual Canvas & Aspect Ratio**: [16:9 Widescreen (`1280x720` for 2D HD/UI, `640x360` balanced, or `320x180` retro pixel art)]
 > **Author / Lead Designer**: [User Name / Agent]
 
@@ -68,15 +68,14 @@
 ## Scene flow and UI/HUD layout
 
 - **Scene State Machine**: `Boot` -> `Title / Main Menu` -> `Gameplay / Stage` -> `Overlay (Pause / Inventory / Tactical Map / Dialogue)` -> `Victory / Game Over`
-- **HUD & UI Regions (`text/v2` + Ebitengine UI)**:
+- **HUD & UI Regions**:
   - **Top-Left**: [e.g., Player HP bar, shield/mana gauge, active status icons]
   - **Top-Right**: [e.g., Score, wave/turn counter, stage timer, minimap]
   - **Bottom / Action Area**: [e.g., Action bar, card hand, combo meter, or dialogue box]
 
-## Technical scope and Ebitengine architecture (`ebitengineer`)
+## Template integration and validation
 
-- **Core Runtime Subsystems**:
-  - **Coordinate & Collision System**: [e.g., AABB tilemap sweep (platformer/top-down), Uniform Spatial Hash (bullet-heaven/shmup), Axial/Diamond Grid Coordinates (tactics/isometric/puzzle), or UI Hit-Testing Rects (deckbuilder/VN)]
-  - **Zero-Allocation Hot Loop**: Pre-allocated entity/particle slices and reused `ebiten.DrawImageOptions` / 4-byte aligned audio buffers (`len(pcm) &^ 3`) inside `Update()` and `Draw()`
-  - **Save Persistence & Backend**: [None | Build-tagged atomic JSON in `os.UserConfigDir()` (desktop) + `window.localStorage` (WASM) | Cloud Run REST leaderboard]
-  - **Verification**: `go test ./...` and headless + `GOOS=js GOARCH=wasm` browser playtest on `http://localhost:8080`
+- Selected template, version and intended distribution target
+- Game scenes, input devices, asset import and save schema
+- Acceptance criteria for the first playable loop
+- Template checks, browser or native playtest, and device-specific checks

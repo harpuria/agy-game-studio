@@ -41,17 +41,15 @@ Use this skill to turn a rough game idea into a clear, genre-matched **Game Desi
 
 | Companion Skill | Role & Handoff Responsibility |
 | :--- | :--- |
-| **`vibe-game-developer`** | Orchestrates discovery, asset generation, baked `//go:embed` wiring, Ebitengine implementation, and playtesting from `GDD.md`. |
-| **`ebitengineer`** | Implements virtual resolution, spatial/collision rules, simulation timing (`60 TPS`), scene FSM, save storage, and zero-allocation `Draw()` loops. |
 | **`sprite-design`, `nano-banana`** | Delivers sprite resolution (`256x256+` 2D HD vs. `32x32`/`64x64` pixel art), animation tags, two-step AI sheets (`image_generate` -> `sprite_normalize`), or `.sprite` DSL assets (`sprite_compile`). |
 | **`procedural-sfx`, `procedural-music`, `lyria`** | Builds zero-latency `.sfx` sound effects (`sfx_synthesize`), polyphonic `.music` scores (`music_validate` + `music_synthesize`), or `lyria` studio BGM tracks (`music_generate`). |
-| **`game-dev-studio`** | Opens `/playtest` in the Game Dev Studio side panel so the user can launch, scrub, and test WASM builds at 60 FPS. |
+| **`game-dev-studio`** | Opens `/playtest` in the Game Dev Studio side panel so the user can capture and annotate Phaser gameplay. |
 
 ---
 
 ## Interactive co-creation protocol
 
-Align on vision and constraints step by step before generating assets or writing Go code:
+Align on vision and constraints step by step before generating assets or implementing the game:
 
 1. **Ask one decision at a time**: Present one focused question per turn (using multiple-choice prompts when available) so the user can steer cleanly without facing a wall of options.
 2. **Lead with a genre-matched default**: Start each question with a concrete recommendation matched to the chosen genre:
@@ -59,7 +57,7 @@ Align on vision and constraints step by step before generating assets or writing
    - *Platformer / Shmup / Bullet-Heaven*: `320x180` or `640x360` virtual canvas with `32x32` or `64x64` pixel art, or `1280x720` with `256x256` 2D HD sprites.
    - *Isometric Strategy / Builder*: `1280x720` canvas with `2:1` diamond tiles (`64x32` or `128x64`) and depth-sorted sprites.
 3. **Resolve dependencies in order**: Lock in **Genre and Camera Projection** -> **Simulation and Core Loop** -> **Win/Loss Rules and Controls** -> **Visual Style, Resolution, and Sprite Pipeline** -> **Audio and Music Pipeline** -> **Scene Flow, HUD, and Save Storage**.
-4. **Write `GDD.md` in the workspace root**: Synthesize confirmed choices using [`references/gdd_template.md`](references/gdd_template.md).
+4. **Update the game design in `docs/game/` (Phaser) or the derived game’s `docs/` (Godot)**: Synthesize confirmed choices using [`references/gdd_template.md`](references/gdd_template.md).
 
 ---
 
@@ -104,7 +102,7 @@ Branch 5: Audio & Music Pipeline
 Branch 6: Scene Flow, HUD & Save Persistence
   ├── Scene FSM & overlays (Boot, Title, Gameplay, Pause/Inventory/Deck/Dialogue, Victory/Game Over)
   ├── HUD layout anchors (top-left status, top-right score/minimap, bottom action bar)
-  └── Save storage & verification (desktop JSON in os.UserConfigDir() + WASM window.localStorage, or Cloud Run REST leaderboard; go test ./... + Playtest panel in Game Dev Studio)
+  └── Save schema and verification through the selected template’s persistence and test workflow
 ```
 
 ---
@@ -143,5 +141,5 @@ Compile confirmed decisions into `GDD.md` using [`references/gdd_template.md`](r
 - [ ] **Core loop and numeric win/loss rules defined**: Victory, defeat, and run pacing are testable.
 - [ ] **Controls mapped**: Logical actions cover Keyboard, Mouse/Pointer, Gamepad, or Touch targets.
 - [ ] **Visual pipeline and animation tags specified**: States virtual resolution, frame tier (`256x256` 2D HD vs. `32x32`/`64x64` pixel art), pipeline path (`A`, `B`, or `C`), and exact motion tags per entity.
-- [ ] **Audio and music plan specified**: Lists `.sfx` cues and `.music` (YM2612/`apple`) or `lyria` BGM tracks, baked to `.wav`/`.mp3` for `//go:embed`.
-- [ ] **Persistence and verification ready**: Specifies desktop/WASM storage (`os.UserConfigDir()` + `localStorage`) or Cloud Run leaderboard, saves `GDD.md` in the workspace root, and plans playtesting in `/playtest`.
+- [ ] **Audio and music plan specified**: Lists `.sfx` cues and `.music` (YM2612/`apple`) or `lyria` BGM tracks, baked to `.wav`/`.mp3` for import into the game.
+- [ ] **Persistence and verification ready**: Record the save schema, target platform and acceptance checks in the game documents.

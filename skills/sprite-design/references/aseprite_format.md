@@ -1,7 +1,6 @@
 # Aseprite File Format (.ase / .aseprite) & GIMP Palette (.gpl) Specifications
 
 Official Aseprite Specifications: [aseprite/aseprite](https://github.com/aseprite/aseprite)
-Recommended Ebitengine Integration Library: [SolarLune/goaseprite](https://github.com/SolarLune/goaseprite)
 
 ---
 
@@ -193,66 +192,3 @@ Channels: RGBA
 The header must declare `Channels: RGBA`, and each color line lists `Red Green Blue Alpha Name`.
 
 ---
-
-## 7. Zero-Allocation `goaseprite` Integration Pattern
-
-When loading exported Aseprite JSON manifests and sprite sheet atlases with [SolarLune/goaseprite](https://github.com/SolarLune/goaseprite) in Ebitengine, pre-slice all frame sub-images during initialization and reuse a struct-level `ebiten.DrawImageOptions` value so `Draw()` performs zero heap allocations per frame:
-
-```go
-package entity
-
-import (
-	"fmt"
-	"image"
-
-	"github.com/SolarLune/goaseprite"
-	"github.com/hajimehoshi/ebiten/v2"
-)
-
-type AsepriteActor struct {
-	File   *goaseprite.File
-	Frames []*ebiten.Image
-	X, Y   float64
-	drawOp ebiten.DrawImageOptions
-}
-
-func NewAsepriteActor(jsonBytes []byte, atlas *ebiten.Image) (*AsepriteActor, error) {
-	if len(jsonBytes) == 0 {
-		return nil, fmt.Errorf("sprite-design: empty Aseprite JSON manifest")
-	}
-	if atlas == nil {
-		return nil, fmt.Errorf("sprite-design: nil atlas image")
-	}
-	file := goaseprite.Read(jsonBytes)
-	if file == nil || len(file.Frames) == 0 {
-		return nil, fmt.Errorf("sprite-design: failed to parse Aseprite frames from JSON")
-	}
-
-	// Pre-slice every frame at load time (zero SubImage allocations in Draw)
-	frames := make([]*ebiten.Image, len(file.Frames))
-	for i, f := range file.Frames {
-		rect := image.Rect(f.X, f.Y, f.X+f.Width, f.Y+f.Height)
-		frames[i] = atlas.SubImage(rect).(*ebiten.Image)
-	}
-
-	return &AsepriteActor{
-		File:   file,
-		Frames: frames,
-	}, nil
-}
-
-func (a *AsepriteActor) Update(dt float32) {
-	a.File.Update(dt)
-}
-
-func (a *AsepriteActor) Draw(screen *ebiten.Image) error {
-	idx := a.File.CurrentFrame
-	if idx < 0 || idx >= len(a.Frames) {
-		return fmt.Errorf("sprite-design: frame index %d out of bounds [0, %d)", idx, len(a.Frames))
-	}
-	a.drawOp.GeoM.Reset()
-	a.drawOp.GeoM.Translate(a.X, a.Y)
-	screen.DrawImage(a.Frames[idx], &a.drawOp)
-	return nil
-}
-```

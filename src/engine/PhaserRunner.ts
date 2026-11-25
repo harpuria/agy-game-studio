@@ -14,10 +14,9 @@
  * limitations under the License.
  */
 
-import { getApiBaseUrl } from '../utils/api.ts';
 import type { FrameDvrBuffer } from './FrameDvrBuffer.ts';
 
-export interface WasmRunnerCallbacks {
+export interface PhaserRunnerCallbacks {
   onFrameRecorded?: () => void;
   onPauseChange?: (paused: boolean) => void;
   onFocusChange?: (focused: boolean) => void;
@@ -49,10 +48,10 @@ interface ChildMessage {
 const MAX_LOG_LINES = 200;
 const BOOT_TIMEOUT_MS = 15_000;
 
-export class WasmRunner {
+export class PhaserRunner {
   private container: HTMLElement;
   private dvrBuffer: FrameDvrBuffer;
-  private callbacks: WasmRunnerCallbacks;
+  private callbacks: PhaserRunnerCallbacks;
 
   private iframe: HTMLIFrameElement | null = null;
   private currentRunnerId = 0;
@@ -67,7 +66,7 @@ export class WasmRunner {
   constructor(
     container: HTMLElement,
     dvrBuffer: FrameDvrBuffer,
-    callbacks: WasmRunnerCallbacks = {}
+    callbacks: PhaserRunnerCallbacks = {}
   ) {
     this.container = container;
     this.dvrBuffer = dvrBuffer;
@@ -98,36 +97,23 @@ export class WasmRunner {
     this.consoleLogs = [];
   }
 
-  public getGameCanvas(): HTMLCanvasElement | null {
-    try {
-      const doc = this.iframe?.contentWindow?.document;
-      if (!doc) return null;
-      return (
-        ((this.iframe?.contentWindow as any)?.__ACTIVE_GAME_CANVAS__ as HTMLCanvasElement) ||
-        doc.querySelector('canvas')
-      );
-    } catch {
-      return null;
-    }
-  }
+  private origin = '';
+  private cancelLaunch?: () => void;
 
-  /**
-   * Mounts the sidecar-hosted `/api/playtest/runner?buildId=...` endpoint inside an `<iframe>`.
-   * Inside Antigravity's UI Extension Aux Pane, this runs directly over HTTP on the sidecar origin
-   * with full WebAssembly, WebGL2, and WebAudio support.
-   */
-  public async launchBuild(buildId: string): Promise<void> {
-    if (!buildId || typeof buildId !== 'string') {
-      throw new Error('[WasmRunner] launchBuild requires a non-empty buildId.');
+  public async connect(address: string): Promise<void> {
+    const url = new URL(address);
+    const localHttp = url.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(url.hostname);
+    if (!localHttp || url.username || url.password || url.origin === location.origin) {
+      throw new Error('Enter the loopback HTTP address printed by playtest-phaser.mjs.');
     }
-
     this.destroy();
     this.dvrBuffer.clear();
     this.clearConsoleLogs();
     this.paused = false;
     this.callbacks.onStateChange?.('loading');
 
-    await this.mountSidecarRunnerIframe({ buildId });
+    this.origin = url.origin;
+    await this.mountGame(url);
   }
 
   private postToChild(payload: Record<string, unknown>): void {
@@ -140,11 +126,11 @@ export class WasmRunner {
         runnerId: this.currentRunnerId,
         ...payload,
       },
-      '*'
+      this.origin
     );
   }
 
-  private mountSidecarRunnerIframe(options: { buildId: string }): Promise<void> {
+  private mountGame(url: URL): Promise<void> {
     return new Promise((resolve, reject) => {
       const runnerId = ++this.currentRunnerId;
       let settled = false;
@@ -155,15 +141,22 @@ export class WasmRunner {
           this.callbacks.onStateChange?.('error');
           reject(
             new Error(
-              `[WasmRunner] Timed out after ${BOOT_TIMEOUT_MS}ms waiting for sidecar runner iframe (/api/playtest/runner) to initialize.`
+              `[PhaserRunner] Timed out after ${BOOT_TIMEOUT_MS}ms waiting for a Phaser frame. Start the game using scripts/playtest-phaser.mjs.`
             )
           );
         }
       }, BOOT_TIMEOUT_MS);
 
+      this.cancelLaunch = () => {
+        window.clearTimeout(bootTimer);
+        if (!settled) reject(new Error('Playtest disconnected'));
+        settled = true;
+      };
+
       const onMessage = (event: MessageEvent) => {
         const data = event.data as ChildMessage | null;
-        if (!data || data.source !== 'playtest-runner-child' || data.runnerId !== runnerId) {
+        if (event.source !== this.iframe?.contentWindow || event.origin !== this.origin) return;
+        if (data?.source !== 'playtest-runner-child' || data.runnerId !== runnerId) {
           return;
         }
 
@@ -196,7 +189,7 @@ export class WasmRunner {
                 );
                 this.callbacks.onFrameRecorded?.();
               } catch (err) {
-                console.error('[WasmRunner] Frame DVR capture error:', err);
+                console.error('[PhaserRunner] Frame DVR capture error:', err);
               }
             }
             break;
@@ -209,13 +202,14 @@ export class WasmRunner {
           }
 
           case 'PANIC': {
-            const msg = data.message || 'Unknown Go WASM runtime error';
+            const msg = data.message || 'Unknown game error';
             this.appendLog('error', msg);
-            this.callbacks.onPanic?.(msg, this.getConsoleLogs());
             if (!settled) {
               settled = true;
               window.clearTimeout(bootTimer);
               reject(new Error(msg));
+            } else {
+              this.callbacks.onPanic?.(msg, this.getConsoleLogs());
             }
             break;
           }
@@ -237,58 +231,18 @@ export class WasmRunner {
       this.activeMessageHandler = onMessage;
       window.addEventListener('message', onMessage);
 
-      const baseUrl = getApiBaseUrl();
-      const params = new URLSearchParams({
-        runnerId: String(runnerId),
-        muted: this.muted ? '1' : '0',
-        captureIntervalMs: String(this.dvrBuffer.captureIntervalMs),
-        buildId: options.buildId,
-      });
-      const pageToken = new URLSearchParams(window.location.search).get('token');
-      if (pageToken) {
-        params.set('token', pageToken);
-      }
-
-      const runnerUrl = `${baseUrl}/api/playtest/runner?${params.toString()}`;
+      url.searchParams.set('studioRunner', String(runnerId));
+      url.searchParams.set('studioOrigin', location.origin);
+      url.searchParams.set('muted', this.muted ? '1' : '0');
       const iframe = document.createElement('iframe');
-      iframe.className = 'wasm-runner-iframe';
-      iframe.setAttribute('title', 'Ebitengine Playtest Viewport');
-      iframe.src = runnerUrl;
+      iframe.className = 'game-runner-iframe';
+      iframe.setAttribute('title', 'Phaser Playtest Viewport');
+      iframe.src = url.href;
 
       this.container.innerHTML = '';
       this.container.appendChild(iframe);
       this.iframe = iframe;
     });
-  }
-
-  public syncDvrFromChild(): void {
-    try {
-      const childWin = this.iframe?.contentWindow as any;
-      if (!childWin || typeof childWin.__PLAYTEST_GET_DVR_FRAMES__ !== 'function') {
-        return;
-      }
-      const rawSlots = childWin.__PLAYTEST_GET_DVR_FRAMES__();
-      if (!Array.isArray(rawSlots) || rawSlots.length === 0) {
-        return;
-      }
-      this.dvrBuffer.clear();
-      for (let i = 0; i < rawSlots.length; i++) {
-        const s = rawSlots[i];
-        if (s && s.canvas && s.width > 0 && s.height > 0) {
-          this.dvrBuffer.recordCanvasSlot(s.canvas, s.width, s.height, s.timestampMs);
-        }
-      }
-    } catch {
-      // Ignore cross-origin restrictions if any
-    }
-  }
-
-  public captureImmediateFrame(): void {
-    if (!this.running) {
-      return;
-    }
-    this.postToChild({ type: 'CAPTURE_NOW' });
-    this.syncDvrFromChild();
   }
 
   public setPaused(paused: boolean): void {
@@ -297,9 +251,6 @@ export class WasmRunner {
     }
     this.paused = paused;
     this.postToChild({ type: 'SET_PAUSED', paused });
-    if (paused) {
-      this.syncDvrFromChild();
-    }
     this.callbacks.onPauseChange?.(paused);
     this.callbacks.onStateChange?.(paused ? 'paused' : 'running');
   }
@@ -345,6 +296,8 @@ export class WasmRunner {
   }
 
   public destroy(): void {
+    this.cancelLaunch?.();
+    this.cancelLaunch = undefined;
     if (this.activeMessageHandler) {
       window.removeEventListener('message', this.activeMessageHandler);
       this.activeMessageHandler = null;

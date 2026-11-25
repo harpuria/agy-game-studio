@@ -1687,7 +1687,7 @@ func SoftClip(x float64) float64 {
 
 // applyAntiClickRamp applies a smooth 44-frame (~1ms at 44.1kHz) micro-fade
 // at the start and end of the PCM buffer, ensuring sample 0 and the final sample
-// are smoothly anchored near zero, eliminating speaker pops when sound effects trigger in Ebitengine.
+// are smoothly anchored near zero, eliminating speaker pops when sound effects start.
 func applyAntiClickRamp(pcm []byte) {
 	alignedLen := len(pcm) &^ 3
 	numFrames := alignedLen / BytesPerFrame

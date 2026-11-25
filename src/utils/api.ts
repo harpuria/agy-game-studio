@@ -55,72 +55,13 @@ export interface HealthInfo {
 
 export interface WorkspaceResolveResult {
   workspace: string;
-  pkg: string;
-  packages?: string[];
-  projectPath?: string;
-  hasGoMod?: boolean;
 }
 
-export interface FsInfoResponse {
-  defaultDir: string;
-  downloadsDir: string;
-  desktopDir: string;
-  homeDir: string;
-  workspaceDir: string;
-  sessionDir: string | null;
-}
-
-export interface FsListDirectoryEntry {
-  name: string;
-  path: string;
-  type: 'directory';
-  hasGoMod: boolean;
-}
-
-export interface FsListFileEntry {
-  name: string;
-  path: string;
-  filePath: string;
-  ext: string;
-  type: string;
-  size: number;
-  modifiedTime: number;
-}
-
-export interface FsListResponse {
-  dir: string;
-  parentDir: string | null;
-  filter: string;
-  directories: FsListDirectoryEntry[];
-  files: FsListFileEntry[];
-  hasGoMod: boolean;
-  packages: string[];
-  defaultPkg: string;
-}
-
-export interface BuildWasmSuccess {
-  ok: true;
-  status: 200;
-  buildId: string;
-  workspace: string;
-  pkg: string;
-  wasmBytes: number;
-  durationMs: number;
-  wasmUrl: string;
-  wasmExecUrl: string;
-}
-
-export interface BuildWasmFailure {
-  ok: false;
-  status: 422;
+export interface PlaytestFailure {
   error: string;
-  compilerOutput: string;
+  detail: string;
   workspace: string;
-  pkg: string;
-  exitCode: number;
 }
-
-export type BuildWasmResult = BuildWasmSuccess | BuildWasmFailure;
 
 export interface SendBugToChatParams {
   sessionId?: string;
@@ -315,7 +256,7 @@ export function onSessionChange(cb: (sessionId: string) => void): void {
 }
 
 /**
- * Resolve the initial Go workspace path from query parameters or `window.__STUDIO_CONFIG__`.
+ * Resolve the initial workspace path from query parameters or `window.__STUDIO_CONFIG__`.
  */
 export function getInitialWorkspacePath(): string {
   const params = new URLSearchParams(window.location.search);
@@ -395,7 +336,7 @@ export function getFullStudioUrl(): string {
 
 /**
  * Pass a `file://` workspace URI from `window.sidecar.getWorkspaceUris()` to the backend
- * to convert it via `fileURLToPath` from `node:url` and discover the default Go package.
+ * to convert it via `fileURLToPath` from `node:url`.
  */
 export async function resolveWorkspaceUri(workspaceUri: string): Promise<WorkspaceResolveResult> {
   const res = await sidecarFetch('/api/workspace/resolve', {
@@ -540,72 +481,8 @@ export async function fetchRecentSessions(): Promise<SessionSummary[]> {
 }
 
 /**
- * Trigger on-demand Go WASM compilation (`GOOS=js GOARCH=wasm go build`) via the sidecar server.
- * Returns a structured `BuildWasmFailure` when compilation fails with HTTP 422 so the UI can
- * display the compiler traceback and 1-click "Send Build Error to Chat" action.
- */
-export async function buildWasm(params: {
-  workspace: string;
-  pkg?: string;
-}): Promise<BuildWasmResult> {
-  const workspace = params.workspace.trim();
-  if (!workspace) {
-    throw new Error('Workspace path is required to compile Go WASM.');
-  }
-  const pkg = params.pkg?.trim() || undefined;
-
-  const res = await sidecarFetch('/api/playtest/build', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ workspace, pkg }),
-  });
-
-  const rawText = await res.text();
-  let data: any = {};
-  if (rawText.trim()) {
-    try {
-      data = JSON.parse(rawText);
-    } catch {
-      throw new Error(
-        `Unexpected non-JSON response from /api/playtest/build (HTTP ${res.status}): ${rawText.slice(0, 300)}`
-      );
-    }
-  }
-
-  if (res.status === 422) {
-    return {
-      ok: false,
-      status: 422,
-      error: data.error || 'Go WASM compilation failed',
-      compilerOutput: data.compilerOutput || data.stderr || data.error || rawText,
-      workspace: data.workspace || workspace,
-      pkg: data.pkg || pkg || '.',
-      exitCode: typeof data.exitCode === 'number' ? data.exitCode : 1,
-    };
-  }
-
-  if (!res.ok) {
-    throw new Error(
-      data.error || `WASM build request failed with HTTP ${res.status} ${res.statusText}`
-    );
-  }
-
-  return {
-    ok: true,
-    status: 200,
-    buildId: data.buildId,
-    workspace: data.workspace || workspace,
-    pkg: data.pkg || pkg || '.',
-    wasmBytes: data.wasmBytes ?? 0,
-    durationMs: data.durationMs ?? 0,
-    wasmUrl: data.wasmUrl || `/api/playtest/wasm?buildId=${encodeURIComponent(data.buildId)}`,
-    wasmExecUrl: data.wasmExecUrl || '/api/playtest/wasm_exec.js',
-  };
-}
-
-/**
  * Save the annotated bug screenshot to the session brain directory and push a structured
- * bug report (with optional WASM console logs) directly into the active Antigravity chat.
+ * bug report (with optional game console logs) directly into the active Antigravity chat.
  */
 export async function sendBugToChat(params: SendBugToChatParams): Promise<SendToChatResponse> {
   const sessionId =
@@ -614,7 +491,7 @@ export async function sendBugToChat(params: SendBugToChatParams): Promise<SendTo
     getActiveSessionId() ||
     'standalone';
   const workspace = params.workspace || getWorkspacePath();
-  const pkg = params.pkg || '.';
+  const pkg = params.pkg;
   const filename = params.filename || `playtest-bug-${Date.now()}.png`;
 
   const res = await sidecarFetch('/api/send-to-chat', {
@@ -659,7 +536,7 @@ export async function sendBugToChat(params: SendBugToChatParams): Promise<SendTo
 }
 
 /**
- * Push a compiler build failure traceback directly into the active Antigravity chat session.
+ * Send a playtest error directly into the active Antigravity chat session.
  */
 export async function sendBuildErrorToChat(
   params: SendBuildErrorToChatParams
@@ -670,7 +547,7 @@ export async function sendBuildErrorToChat(
     getActiveSessionId() ||
     'standalone';
   const workspace = params.workspace || getWorkspacePath();
-  const pkg = params.pkg || '.';
+  const pkg = params.pkg;
 
   const res = await sidecarFetch('/api/send-to-chat', {
     method: 'POST',
@@ -787,76 +664,3 @@ export async function sendStudioErrorToChat(
 
   return data as SendToChatResponse;
 }
-
-/**
- * Fetch filesystem directory defaults (`defaultDir`, `workspaceDir`, `downloadsDir`, `desktopDir`, `sessionDir`).
- */
-export async function fetchFsInfo(sessionId?: string | null): Promise<FsInfoResponse> {
-  const workspaceUris = await getWorkspaceUris();
-  const query = new URLSearchParams();
-  const sid = sessionId ?? getSessionId();
-  if (sid) {
-    query.set('session_id', sid);
-  }
-  if (workspaceUris.length > 0 && workspaceUris[0]) {
-    query.set('workspace_uri', workspaceUris[0]);
-  } else if (getWorkspacePath()) {
-    query.set('workspace', getWorkspacePath());
-  }
-  const qs = query.toString();
-  const res = await sidecarFetch(`/api/fs/info${qs ? `?${qs}` : ''}`, {
-    method: 'GET',
-    cache: 'no-store',
-  });
-  if (!res.ok) {
-    const errData = await res.json().catch(() => ({}));
-    throw new Error(errData.error || `Failed to fetch filesystem info: HTTP ${res.status}`);
-  }
-  return (await res.json()) as FsInfoResponse;
-}
-
-/**
- * List immediate subdirectories and matching files in `dir` via `/api/fs/list`.
- */
-export async function fetchFsList(
-  dir: string,
-  filter: 'sound' | 'sprite' | 'project' | 'all' = 'all',
-  extensions?: string[]
-): Promise<FsListResponse> {
-  const query = new URLSearchParams();
-  if (dir && dir.trim()) {
-    query.set('dir', dir.trim());
-  }
-  query.set('filter', filter);
-  if (extensions && extensions.length > 0) {
-    query.set('extensions', extensions.join(','));
-  }
-  const res = await sidecarFetch(`/api/fs/list?${query.toString()}`, {
-    method: 'GET',
-    cache: 'no-store',
-  });
-  if (!res.ok) {
-    const errData = await res.json().catch(() => ({}));
-    throw new Error(errData.error || `Failed to list directory "${dir}": HTTP ${res.status}`);
-  }
-  return (await res.json()) as FsListResponse;
-}
-
-/**
- * Discover runnable Go main packages inside `dir` for the Playtest project picker.
- */
-export async function fetchPackages(dir: string): Promise<{
-  workspace: string;
-  pkg: string;
-  packages: string[];
-  hasGoMod: boolean;
-}> {
-  const list = await fetchFsList(dir, 'project');
-  return {
-    workspace: list.dir || dir,
-    pkg: list.defaultPkg || '.',
-    packages: Array.isArray(list.packages) && list.packages.length > 0 ? list.packages : ['.'],
-    hasGoMod: Boolean(list.hasGoMod),
-  };
-}
-

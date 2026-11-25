@@ -2,11 +2,11 @@
   "name": "agy-game-studio",
   "displayName": "Game Dev Studio",
   "version": "0.4.0",
-  "description": "Unified 2D game development plugin for Google Antigravity, Go, and Ebitengine bundling 9 skills (vibe-game-developer, game-design, ebitengineer, sprite-design, procedural-sfx, procedural-music, nano-banana, lyria, game-dev-studio), a 10-tool Go MCP server (sound_presets, music_synthesize, music_validate, sfx_synthesize, sprite_inspect, sprite_compile, sprite_normalize, sprite_extract_palette, image_generate, music_generate), and the Game Dev Studio 60 FPS WASM Playtest UI (with 10s DVR GIF bug annotation).",
+  "description": "Antigravity game development skills for Phaser Web and Godot Mobile/PC, a shared asset MCP server, and a Phaser playtest panel.",
   "logo": "assets/logo.svg",
   "suggestedPrompts": [
-    "Design and build an Ebitengine 2D game in Go, then open the Game Dev Studio Playtest panel to run it at 60 FPS and capture a 10s DVR GIF bug report",
-    "Compose procedural .music or .sfx audio, or generate a track with Lyria and bake 44.1 kHz stereo WAV files for Go using the game-studio MCP tools",
-    "Generate game sprites with Nano Banana, normalize chroma-key sprite sheets, or compile .sprite and .aseprite animations using the game-studio MCP tools"
+    "현재 프로젝트의 템플릿을 확인하고 게임 아이디어를 첫 플레이 가능한 장면으로 만들어 줘.",
+    "Phaser 게임을 Playtest 패널에서 실행하고 버그가 발생한 프레임을 캡처해 줘.",
+    "Godot 게임에 사용할 스프라이트와 효과음을 만들고 템플릿의 장면과 오디오에 연결해 줘."
   ]
 }

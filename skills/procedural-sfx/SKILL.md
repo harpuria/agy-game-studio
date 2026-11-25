@@ -1,23 +1,17 @@
 ---
 name: procedural-sfx
-description: >
-  Pure-code procedural game sound effect (SFX) design and synthesis via the
-  game-studio MCP server (.sfx DSL). Uses sound_presets and sfx_synthesize
-  with PolyBLEP anti-aliasing, 18 archetype presets, duty and SVF filter
-  sweeps, Galois LFSR chiptune noise, 2-op FM, and acoustic QA validation to
-  bake 4-byte aligned 16-bit 44.1 kHz stereo .wav cues for //go:embed in
-  Ebitengine.
+description: Design procedural .sfx cues and render WAV sound effects with game-studio MCP.
 license: Apache-2.0
 metadata:
   category: game-dev
-  tags: "sfx, audio, dsp, synthesis, chiptune, ebitengine"
+  tags: "sfx, audio, dsp, synthesis, chiptune"
   author: Daniela Petruzalek (daniela@danicat.dev)
   version: "0.4.0"
 ---
 
 # Procedural sound effects: SFX DSL and MCP synthesis
 
-`procedural-sfx` turns plain-text `.sfx` scripts into `44.1 kHz`, 16-bit signed little-endian stereo `.wav` sound cues via the **`game-studio` MCP server**, ready to embed directly into Go Ebitengine games with `//go:embed`.
+`procedural-sfx` turns plain-text `.sfx` scripts into `44.1 kHz`, 16-bit signed little-endian stereo `.wav` sound cues via the **`game-studio` MCP server**.
 
 - **Complete `.sfx` DSL grammar and 18-preset reference**: [`references/sfx_dsl.md`](references/sfx_dsl.md)
 
@@ -27,10 +21,9 @@ metadata:
 
 | Skill | Role in the audio pipeline |
 | :--- | :--- |
-| **`procedural-music`** | Multi-track background music (`.music` DSL) sharing the single `44.1 kHz` Ebitengine `audio.Context`. Keeping BGM bass below `260 Hz` leaves mid and high headroom for SFX. |
+| **`procedural-music`** | Multi-track background music (`.music` DSL) for use alongside synthesized cues. Keeping BGM bass below `260 Hz` leaves mid and high headroom for SFX. |
 | **`lyria`** | Pair `procedural-sfx` for fast, predictable gameplay cues (lasers, hits, jumps, UI ticks) with `lyria` (`music_generate`) when a game calls for AI studio soundtracks. |
 | **`game-design` and `vibe-game-developer`** | Map each player verb, hitstop, screen shake, and UI transition to a distinct sound silhouette so actions feel physical without muddying the mix. |
-| **`ebitengineer`** | Embed baked `.wav` cues via `//go:embed`, decode to **4-byte aligned** stereo PCM (`len(pcm) &^ 3`) during `Boot`, and enforce per-cue cooldowns inside `Update()`. |
 
 ---
 
@@ -46,14 +39,14 @@ Run preset discovery, synthesis, acoustic QA validation, and `.wav` export direc
 ### Example MCP workflow
 
 1. Call `sound_presets` to inspect exact parameters for the 18 built-in archetypes.
-2. Call `sfx_synthesize` to validate and bake a `.sfx` cue to `internal/assets/sfx/explosion.wav`:
+2. Call `sfx_synthesize` to validate and bake a `.sfx` cue to `assets/sfx/explosion.wav`:
 
 ```json
 {
   "tool": "sfx_synthesize",
   "arguments": {
     "dsl": "title \"Deep Cinematic Explosion\"\ntype sfx\ninst transient wave=noise noise_filter=0.90 vol=0.32 adsr=0.001,0.04,0.00,0.04 hpf=800\ninst rumble preset=explosion_deep vol=0.40 adsr=0.005,0.25,0.25,0.55\ntrack punch transient: transient:80ms R:720ms\ntrack boom rumble: 120Hz->20Hz:800ms\n",
-    "outWavPath": "internal/assets/sfx/explosion.wav"
+    "outWavPath": "assets/sfx/explosion.wav"
   }
 }
 ```
@@ -128,76 +121,6 @@ Every `.sfx` cue returned by `sfx_synthesize` must pass `passed: true`:
 
 ---
 
-## Baking, `//go:embed`, and zero-allocation Ebitengine playback
+## Import into the game
 
-Save your `.sfx` source script alongside the game and bake the final `.wav` cue via `sfx_synthesize` (`outWavPath`) into `internal/assets/sfx/`. Embed the baked `.wav` via `//go:embed`, decode it once during `Boot` into a **4-byte aligned** stereo PCM buffer (`len(pcm) &^ 3`), and enforce per-cue cooldowns (`30ms` to `60ms`) in `Update()`:
-
-```go
-package audio
-
-import (
-	"bytes"
-	_ "embed"
-	"fmt"
-	"io"
-	"time"
-
-	ebitaudio "github.com/hajimehoshi/ebiten/v2/audio"
-	"github.com/hajimehoshi/ebiten/v2/audio/wav"
-)
-
-//go:embed assets/sfx/laser.wav
-var laserWAV []byte
-
-type SoundManager struct {
-	audioCtx *ebitaudio.Context
-	sounds   map[string][]byte
-	lastPlay map[string]time.Time
-}
-
-func DecodeEmbeddedWAV(audioCtx *ebitaudio.Context, wavBytes []byte, label string) ([]byte, error) {
-	stream, err := wav.DecodeWithSampleRate(audioCtx.SampleRate(), bytes.NewReader(wavBytes))
-	if err != nil {
-		return nil, fmt.Errorf("sfx: decode WAV %s: %w", label, err)
-	}
-	pcm, err := io.ReadAll(stream)
-	if err != nil {
-		return nil, fmt.Errorf("sfx: read PCM %s: %w", label, err)
-	}
-	aligned := len(pcm) &^ 3
-	if aligned < 4 {
-		return nil, fmt.Errorf("sfx: %s produced empty aligned PCM", label)
-	}
-	return pcm[:aligned], nil
-}
-
-func NewSoundManager(audioCtx *ebitaudio.Context) (*SoundManager, error) {
-	if audioCtx == nil {
-		return nil, fmt.Errorf("sfx: nil audio.Context")
-	}
-	laserPCM, err := DecodeEmbeddedWAV(audioCtx, laserWAV, "laser.wav")
-	if err != nil {
-		return nil, err
-	}
-	return &SoundManager{
-		audioCtx: audioCtx,
-		sounds:   map[string][]byte{"laser": laserPCM},
-		lastPlay: make(map[string]time.Time, 8),
-	}, nil
-}
-
-func (sm *SoundManager) PlaySFX(name string, cooldown time.Duration) error {
-	pcm, ok := sm.sounds[name]
-	if !ok {
-		return fmt.Errorf("sfx: unknown cue %q", name)
-	}
-	now := time.Now()
-	if last, exists := sm.lastPlay[name]; exists && now.Sub(last) < cooldown {
-		return nil
-	}
-	sm.lastPlay[name] = now
-	player := sm.audioCtx.NewPlayerFromBytes(pcm[:len(pcm)&^3])
-	player.Play()
-	return nil
-}
-```
+Choose output paths in the game's asset directory. For Phaser, follow [phaser-web](../phaser-web/SKILL.md) and register the exported file in the game's preload list. For Godot, follow [godot-game](../godot-game/SKILL.md) and confirm the imported resource in the target scene.
