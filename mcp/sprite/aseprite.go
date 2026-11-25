@@ -572,17 +572,74 @@ type AsepriteFrameEntry struct {
 
 // AsepriteMetaJSON describes the sprite sheet metadata and animation frameTags.
 type AsepriteMetaJSON struct {
-	App         string           `json:"app"`
-	Version     string           `json:"version"`
-	Image       string           `json:"image"`
-	Format      string           `json:"format"`
-	Size        AsepriteSizeJSON `json:"size"`
-	FrameWidth  int              `json:"frameWidth"`
-	FrameHeight int              `json:"frameHeight"`
-	Cols        int              `json:"cols"`
-	Rows        int              `json:"rows"`
-	Scale       string           `json:"scale"`
-	FrameTags   []CompiledTag    `json:"frameTags"`
+	App         string             `json:"app"`
+	Version     string             `json:"version"`
+	Image       string             `json:"image"`
+	Format      string             `json:"format"`
+	Size        AsepriteSizeJSON   `json:"size"`
+	FrameWidth  int                `json:"frameWidth"`
+	FrameHeight int                `json:"frameHeight"`
+	Cols        int                `json:"cols"`
+	Rows        int                `json:"rows"`
+	Scale       string             `json:"scale"`
+	FrameTags   []AsepriteFrameTag `json:"frameTags"`
+}
+
+// AsepriteFrameTag is one animation tag in the JSON manifest. It carries the standard
+// Aseprite fields (from, to, direction, repeat) that engine importers read, such as
+// Phaser's load.aseprite + anims.createFromAseprite, next to this tool's own fields.
+type AsepriteFrameTag struct {
+	CompiledTag
+	From      int    `json:"from"`
+	To        int    `json:"to"`
+	Direction string `json:"direction"`
+	Repeat    string `json:"repeat,omitempty"`
+}
+
+// NewAsepriteFrameTags converts compiled tags into manifest tags with standard Aseprite fields.
+func NewAsepriteFrameTags(tags []CompiledTag) []AsepriteFrameTag {
+	out := make([]AsepriteFrameTag, 0, len(tags))
+	for _, tag := range tags {
+		entry := AsepriteFrameTag{CompiledTag: tag, From: tag.FromFrame, To: tag.ToFrame, Direction: "forward"}
+		switch FormatLoopMode(tag.Loop) {
+		case "reverse":
+			entry.Direction = "reverse"
+		case "pingpong":
+			entry.Direction = "pingpong"
+		case "once":
+			// Aseprite 1.3 stores the play count as a string; "1" plays the tag once.
+			entry.Repeat = "1"
+		}
+		out = append(out, entry)
+	}
+	return out
+}
+
+// CompiledTagsFromManifest reads manifest tags back, accepting both this tool's fields and
+// plain Aseprite exports that only have from, to, direction and repeat.
+func CompiledTagsFromManifest(tags []AsepriteFrameTag) []CompiledTag {
+	out := make([]CompiledTag, 0, len(tags))
+	for _, entry := range tags {
+		tag := entry.CompiledTag
+		if tag.FromFrame == 0 && tag.ToFrame == 0 && (entry.From != 0 || entry.To != 0) {
+			tag.FromFrame, tag.ToFrame = entry.From, entry.To
+		}
+		if tag.Frames == 0 {
+			tag.Frames = tag.ToFrame - tag.FromFrame + 1
+		}
+		if tag.Loop == "" {
+			switch {
+			case entry.Repeat == "1":
+				tag.Loop = "once"
+			case entry.Direction == "pingpong" || entry.Direction == "reverse":
+				tag.Loop = entry.Direction
+			default:
+				tag.Loop = "loop"
+			}
+		}
+		out = append(out, tag)
+	}
+	return out
 }
 
 // ExportPreviewPNG writes a nearest-neighbor magnified PNG preview of the sprite sheet
@@ -968,7 +1025,7 @@ func ExportPNGSheet(pngPath, jsonPath string, cs *CompiledSprite) error {
 				Cols:        cs.SheetCols,
 				Rows:        cs.SheetRows,
 				Scale:       "1",
-				FrameTags:   cs.Tags,
+				FrameTags:   NewAsepriteFrameTags(cs.Tags),
 			},
 		}
 		jb, err := json.MarshalIndent(manifest, "", "  ")

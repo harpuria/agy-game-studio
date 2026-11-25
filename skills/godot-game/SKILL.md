@@ -55,12 +55,20 @@ Build maintainable 2D games in **Godot 4.7.2 Standard** (GDScript) on `harpuria/
 
 ## Asset integration (`game-studio` MCP outputs)
 
-Bake sprites and audio with `game-studio` MCP tools into `game/assets/` (using absolute paths when calling MCP tools), then import them with `godot --headless --path . --editor --import --quit`:
+Bake sprites and audio with `game-studio` MCP tools into `game/assets/` (pass absolute paths such as `<GAME_ROOT>/game/assets/sprites/hero.png` to the tools; take keys, file names and frame sizes from the asset manifest in `docs/GDD.md`), then import them with `godot --headless --path . --editor --import --quit`:
 
 1. **Spritesheets (`sprite_compile` / `sprite_normalize` -> `.png` + `.json`)**:
    - Place the `.png` under `game/assets/sprites/`.
    - For pixel art, set texture filter to **Nearest** (`CanvasItem.TEXTURE_FILTER_NEAREST` on the node or default project texture filter). For 2D HD (`256×256+`), use **Linear**.
-   - Slice uniform sheets into a `SpriteFrames` resource for `AnimatedSprite2D` (or use `Sprite2D` with `hframes`/`vframes` + `AnimationPlayer`). Match each animation's frame order, FPS, and loop flag against the `.json` manifest.
+   - Place the `.json` manifest next to the `.png`. Copy [`scripts/aseprite_sprite_frames.gd`](scripts/aseprite_sprite_frames.gd) and [`scripts/bake_sprite_frames.gd`](scripts/bake_sprite_frames.gd) to `game/tools/` once per game, then bake a `SpriteFrames` resource for `AnimatedSprite2D` after importing:
+
+     ```bash
+     godot --headless --path . --editor --import --quit
+     godot --headless --path . --script res://game/tools/bake_sprite_frames.gd -- \
+         res://game/assets/sprites/hero.json res://game/assets/sprites/hero_frames.tres
+     ```
+
+     Each manifest tag becomes one animation with its frame order (`forward`, `reverse`, `pingpong`), speed and loop flag. Assign `hero_frames.tres` to `AnimatedSprite2D.sprite_frames` and `play("idle")`. Re-run the bake whenever the sheet is regenerated. Commit the `.tres`; the exported game does not need the `.json`.
 2. **Audio (`sfx_synthesize`, `music_synthesize`, `music_generate` -> `.wav` / `.mp3`)**:
    - Place `.wav` files under `game/assets/audio/`. Prefer **`.wav`** for gapless looping BGM.
    - For looping BGM `.wav` files, enable `edit/loop_mode=1` (Forward) in the `.wav.import` file (or via the Godot Import dock) and re-import.

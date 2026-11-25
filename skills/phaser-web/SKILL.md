@@ -52,7 +52,7 @@ Build maintainable, 60 FPS browser games on `harpuria/phaser-web-template` (**Ph
 
 ## Asset integration (`game-studio` MCP outputs)
 
-Bake sprite sheets and audio with `game-studio` MCP tools into `public/assets/`, register keys in `src/game/assets.ts`, and queue them in `queueAssets(load, k)`:
+Bake sprite sheets and audio with `game-studio` MCP tools into `public/assets/` (pass absolute paths such as `<GAME_ROOT>/public/assets/sprites/hero.png` to the tools), register keys in `src/game/assets.ts`, and queue them in `queueAssets(load, k)`. Take keys, file names and frame sizes from the asset manifest in `docs/game/GDD.md`:
 
 ```ts
 // src/game/assets.ts
@@ -65,17 +65,17 @@ export const assetKeys = {
 
 export function queueAssets(load: Phaser.Loader.LoaderPlugin, _k = 1) {
   load.setPath(`${import.meta.env.BASE_URL}assets/`);
-  load.spritesheet(assetKeys.hero, 'hero.png', {
-    frameWidth: 64,
-    frameHeight: 64,
-  });
+  // Sheets from sprite_compile / sprite_normalize: PNG + JSON manifest with frameTags.
+  load.aseprite(assetKeys.hero, 'sprites/hero.png', 'sprites/hero.json');
   load.image(assetKeys.tiles, 'tiles.png');
-  load.audio(assetKeys.bgmStage, 'stage.wav');
-  load.audio(assetKeys.sfxJump, 'jump.wav');
+  load.audio(assetKeys.bgmStage, 'audio/stage.wav');
+  load.audio(assetKeys.sfxJump, 'audio/jump.wav');
 }
 ```
 
-- **Animations**: Register animations once (check `!this.anims.exists('hero-idle')`) using `this.anims.generateFrameNumbers(assetKeys.hero, { start: 0, end: 3 })` matched to the frame ranges in the baked `.json` manifest.
+- **Animations**: Copy [`scripts/sheetAnims.ts`](scripts/sheetAnims.ts) to `src/game/sheetAnims.ts` and call `createSheetAnims(this, assetKeys.hero)` once after preload (for example in `PreloadScene.create`). It registers one animation per manifest tag as `hero-idle`, `hero-walk`, … with the tag's speed, `pingpong` as yoyo, and looping unless the tag plays once. Then `sprite.play('hero-walk')`.
+  - Do not use `this.anims.createFromAseprite(key)` directly: it names animations by tag alone (a second character's `idle` is skipped) and creates every animation with `repeat: 0`, so loops play only once.
+  - For a sheet without a JSON manifest, use `load.spritesheet(key, png, { frameWidth, frameHeight })` and `this.anims.generateFrameNumbers(key, { start, end })`.
 - **Gapless BGM**: Prefer `.wav` (from `music_synthesize` or `lyria-3.5`) for looping stage music so MP3 priming padding does not click at loop seams.
 - **Audio playback**: Always go through `this.app.audio.playMusic(key)` and `this.app.audio.sfx(key)`—never call `this.sound.play` directly, so user mute, pause suspension, and platform/ad `setExternalMute` all work automatically.
 

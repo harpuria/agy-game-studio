@@ -137,8 +137,8 @@ Confirm animation tags, camera projection (`2D side-profile`, `3/4 top-down`, `2
 
 ### Wiring baked assets into each template
 
-- **Phaser Web**: Place baked `.png` and `.wav` files under `public/assets/`, declare keys in `src/game/assets.ts`, queue them in `queueAssets`, load uniform sheets with `load.spritesheet(..., { frameWidth, frameHeight })`, register animations with `anims.generateFrameNumbers`, and play audio through `AudioService`.
-- **Godot Mobile & PC**: Place baked `.png` and `.wav` files under `game/assets/` (or the game's asset folder), let Godot import them (`--editor --import --quit`), slice uniform sheets in `SpriteFrames` for `AnimatedSprite2D` matching tag frame order and FPS, enable loop on BGM `.wav.import` if looping, and play audio through `AudioManager`.
+- **Phaser Web**: Place baked `.png`, `.json` and `.wav` files under `public/assets/`, declare keys in `src/game/assets.ts`, queue sheets with `load.aseprite(key, png, json)` in `queueAssets`, register animations with `createSheetAnims` from `phaser-web/scripts/sheetAnims.ts`, and play audio through `AudioService`.
+- **Godot Mobile & PC**: Place baked `.png` and `.wav` files under `game/assets/` (or the game's asset folder), let Godot import them (`--editor --import --quit`), bake each sheet's `.json` manifest into a `SpriteFrames` `.tres` with `godot-game/scripts/bake_sprite_frames.gd` for `AnimatedSprite2D`, enable loop on BGM `.wav.import` if looping, and play audio through `AudioManager`.
 
 ### Fail-fast credential policy
 
