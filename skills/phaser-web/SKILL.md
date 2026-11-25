@@ -107,7 +107,7 @@ Run all commands from the **game repository root**:
 | Self-hosted production build | `npm run build:standalone` | Always specify platform target (`vite build` without target aborts) |
 | CrazyGames submission build | `npm run build:crazygames` | Follow `docs/CRAZYGAMES.md` checklist before upload |
 
-**Interactive playtest & bug capture**: Hand off to `game-dev-studio` (`node /path/to/agy-game-studio/scripts/playtest-phaser.mjs` + `[Game Dev Studio](sidecar://agy-game-studio/studio/playtest)`) when the user wants to play inside Antigravity, annotate a frame, or send a 10-second DVR GIF.
+**Interactive playtest & bug capture**: Hand off to `game-dev-studio` (`[Game Dev Studio](sidecar://agy-game-studio/studio/playtest)`, whose **Run game** button starts and connects the game after `npm ci`) when the user wants to play inside Antigravity, annotate a frame, or send a 10-second DVR GIF.
 
 **Reporting rule**: Separate checks that actually ran from unverified browsers/devices. If Playwright ran only a subset of projects (e.g., Chromium without Firefox/WebKit), state the exact projects executed.
 

@@ -54,7 +54,7 @@ Always check the workspace before designing, writing code, or placing assets. Th
 | **Procedural SFX (`.sfx`)** | `procedural-sfx` | **SFX Designer**: Lists built-in archetypes (`sound_presets`) and synthesizes 16-bit 44.1 kHz stereo WAV cues (`sfx_synthesize`) with acoustic QA validation. |
 | **Procedural BGM (`.music`)** | `procedural-music` | **Procedural Composer**: Validates music theory and barlines (`music_validate`) and renders polyphonic `.music` scores (`music_synthesize`, SEGA YM2612/PSG or macOS `apple: true` CoreAudio) to `.wav` and stems. |
 | **Generative AI music** | `lyria` | **AI Music Composer**: Calls `music_generate` (`lyria-3.5`, `lyria-3-clip-preview`, `lyria-3-pro-preview`) for 44.1 kHz stereo `.wav` or `.mp3` tracks, vocal songs with lyrics (`outLyricsPath`), and image-to-music cues. |
-| **Phaser Playtest panel** | `game-dev-studio` | **Studio Playtest Launcher**: Connects a Phaser Web game via `scripts/playtest-phaser.mjs` and surfaces `[Game Dev Studio](sidecar://agy-game-studio/studio/playtest)` for 10s DVR capture, bug annotation, and GIF reports. |
+| **Phaser Playtest panel** | `game-dev-studio` | **Studio Playtest Launcher**: Starts and connects a Phaser Web game from the panel's **Run game** button and surfaces `[Game Dev Studio](sidecar://agy-game-studio/studio/playtest)` for 10s DVR capture, bug annotation, and GIF reports. |
 
 ---
 
@@ -66,7 +66,7 @@ The plugin runs the headless Go `game-studio` MCP server (`mcp_config.json`) wit
 | :--- | :--- | :--- |
 | **`game-studio` MCP Audio** | `sound_presets`, `sfx_synthesize`, `music_validate`, `music_synthesize`, `music_generate` | Lists SFX/music presets, validates `.music` scores, renders `.sfx` and `.music` scripts to 44.1 kHz stereo `.wav` and stems, and generates AI `.wav`/`.mp3` tracks with Lyria. |
 | **`game-studio` MCP Sprite & Image** | `sprite_inspect`, `sprite_compile`, `sprite_normalize`, `sprite_extract_palette`, `image_generate` | Generates AI art and `4x4` chroma grids with Nano Banana, strips chroma backgrounds and packs `.png`/`.json`/`.aseprite`/`.sprite`/`.gif`, compiles `.sprite` DSL, and extracts 4-step shading ramps. |
-| **Game Dev Studio (`/playtest`)** | `sidecar://agy-game-studio/studio/playtest` | Connects to a running **Phaser Web** game (`scripts/playtest-phaser.mjs`) with a 10-second DVR rewind buffer, visual bug annotation (`F8` or `` ` ``), and PNG/GIF export to chat. |
+| **Game Dev Studio (`/playtest`)** | `sidecar://agy-game-studio/studio/playtest` | Starts a **Phaser Web** game in one click (**Run game**) and connects to it, with a 10-second DVR rewind buffer, visual bug annotation (`F8` or `` ` ``), and PNG/GIF export to chat. |
 
 ---
 
@@ -157,7 +157,7 @@ Work through the stages needed for the user's request and verify each gate befor
 3. **Visual & audio assets (`sprite-design`, `nano-banana`, `procedural-sfx`, `procedural-music`, `lyria`)**
    - *Gate*: Assets are baked via MCP tools, visually/acoustically checked, imported into the template, and verified in the live target scene (animations, scale, loop boundaries, SFX cooldowns).
 4. **Verification & playtest (`phaser-web` + `game-dev-studio`, or `godot-game`)**
-   - **Phaser Web**: Run `npm run check`; run `npm run test:e2e` for UI/input changes (`E2E_PREVIEW=1 npm run test:e2e` for build/service changes). For interactive playtesting or bug capture, launch `scripts/playtest-phaser.mjs` and surface `[Game Dev Studio](sidecar://agy-game-studio/studio/playtest)` via `game-dev-studio`.
+   - **Phaser Web**: Run `npm run check`; run `npm run test:e2e` for UI/input changes (`E2E_PREVIEW=1 npm run test:e2e` for build/service changes). For interactive playtesting or bug capture, surface `[Game Dev Studio](sidecar://agy-game-studio/studio/playtest)` via `game-dev-studio`.
    - **Godot Mobile**: Run `godot --headless --path . --editor --import --quit` and the affected `tests/integration.tscn` scenarios (default, `--disabled`, `--native`), plus `python3 tools/check_docs.py` if docs changed. Run the scene in the editor (`F5`) or `godot --path .`.
    - **Godot PC**: Run `bash tools/validate.sh` (set `GODOT` if outside `PATH`) and inspect both summary and logs. Run the scene in the editor (`F5`) or `godot --path .` (`--capture` for GUI verification).
    - *Reporting rule*: Explicitly separate checks that actually ran from unverified browsers, OS binaries, physical mobile devices, or live store backends. Never claim device or store verification from desktop/headless tests alone.

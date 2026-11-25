@@ -26,6 +26,9 @@ import {
   sendBugToChat,
   sendBuildErrorToChat,
   sendStudioErrorToChat,
+  startPlaytest,
+  stopPlaytest,
+  PlaytestLaunchError,
   type PlaytestFailure
 } from '../utils/api.ts';
 import { FrameDvrBuffer } from '../engine/FrameDvrBuffer.ts';
@@ -345,8 +348,8 @@ export class PlaytestStudioUI {
             type="button"
             id="btn-build-run"
             class="btn btn-primary btn-sm"
-            data-tooltip="Connect to Phaser"
-            title="Connect to Phaser"
+            data-tooltip="Start and connect the Phaser game"
+            title="Start and connect the Phaser game"
           >
             <span id="build-btn-label">🚀 Run</span>
           </button>
@@ -572,29 +575,39 @@ export class PlaytestStudioUI {
           <div class="ready-icon-badge">🎮</div>
           <h2 class="ready-title">Phaser Playtest</h2>
           <p class="ready-subtitle">
-            From the Phaser game directory, run the plugin’s <code>scripts/playtest-phaser.mjs</code> with Node.
-            Connect to its local Vite URL, then press <kbd>F8</kbd> to annotate a frame.
+            Press <strong>Run</strong> to start the Phaser game in this workspace and connect to it.
+            Press <kbd>F8</kbd> during play to pause and annotate a frame.
           </p>
 
           <div class="ready-form-row">
             <div class="ready-field">
-              <label for="playtest-url">Phaser playtest URL</label>
-              <div style="display: flex; align-items: center; gap: 6px;">
-                <input
-                  type="url"
-                  id="playtest-url"
-                  class="input-text"
-                  style="flex: 1;"
-                  placeholder="http://127.0.0.1:5173"
-                  value="http://127.0.0.1:5173"
-                />
-              </div>
+              <label for="playtest-folder">Game folder</label>
+              <input
+                type="text"
+                id="playtest-folder"
+                class="input-text"
+                placeholder="Workspace folder (or a folder whose package.json depends on phaser)"
+                spellcheck="false"
+              />
             </div>
           </div>
 
+          <details id="playtest-url-details" class="ready-advanced">
+            <summary>Connect to a server you started yourself</summary>
+            <div class="ready-field">
+              <label for="playtest-url">Playtest URL from <code>scripts/playtest-phaser.mjs</code></label>
+              <input
+                type="url"
+                id="playtest-url"
+                class="input-text"
+                placeholder="http://127.0.0.1:5173"
+              />
+            </div>
+          </details>
+
           <div class="ready-actions">
             <button type="button" id="btn-ready-build" class="btn btn-primary btn-lg">
-              <span>▶ Connect to game</span>
+              <span>▶ Run game</span>
             </button>
           </div>
         </div>
@@ -612,7 +625,7 @@ export class PlaytestStudioUI {
               </div>
             </div>
             <div class="error-card-actions">
-              <button type="button" id="btn-retry-build" class="btn btn-outline btn-sm">🔄 Reconnect</button>
+              <button type="button" id="btn-retry-build" class="btn btn-outline btn-sm">🔄 Try again</button>
               <button type="button" id="btn-send-build-error" class="btn btn-danger btn-sm">
                 <span>🚨 Send Game Error to Chat</span>
               </button>
@@ -725,10 +738,15 @@ export class PlaytestStudioUI {
   }
 
   private bindEvents(): void {
-    const address = this.viewportEl.querySelector<HTMLInputElement>('#playtest-url');
-    address?.addEventListener('keydown', event => {
-      if (event.key === 'Enter') void this.connectGame();
+    const folderInput = this.viewportEl.querySelector<HTMLInputElement>('#playtest-folder');
+    folderInput?.addEventListener('input', () => {
+      delete folderInput.dataset.autofilled;
     });
+    for (const id of ['#playtest-url', '#playtest-folder']) {
+      this.viewportEl.querySelector<HTMLInputElement>(id)?.addEventListener('keydown', event => {
+        if (event.key === 'Enter') void this.connectGame();
+      });
+    }
 
     onWorkspaceChange(() => this.updateHeaderInputsUI());
     onSessionChange(() => this.updateSessionBadgeUI());
@@ -759,6 +777,7 @@ export class PlaytestStudioUI {
     // Home button (return to Ready Card)
     this.headerEl.querySelector('#btn-home-ready')?.addEventListener('click', () => {
       this.showReadyStateView();
+      void stopPlaytest().catch(() => {});
     });
 
     // Keypad toggle
@@ -1008,7 +1027,18 @@ export class PlaytestStudioUI {
     this.setConnectButtonsLoading(true);
 
     try {
-      const address = this.viewportEl.querySelector<HTMLInputElement>('#playtest-url')!.value.trim();
+      const manualUrl = this.viewportEl.querySelector<HTMLInputElement>('#playtest-url')?.value.trim() || '';
+      const useManualUrl =
+        Boolean(manualUrl) &&
+        Boolean(this.viewportEl.querySelector<HTMLDetailsElement>('#playtest-url-details')?.open);
+      let address = manualUrl;
+      if (!useManualUrl) {
+        this.setConnectButtonsLoading(true, 'Starting game...');
+        const folder = this.viewportEl.querySelector<HTMLInputElement>('#playtest-folder')?.value.trim() || '';
+        const started = await startPlaytest(folder || getWorkspacePath());
+        address = started.url;
+        this.setConnectButtonsLoading(true);
+      }
       this.showActiveGameStage();
       await this.runner.connect(address);
 
@@ -1019,7 +1049,11 @@ export class PlaytestStudioUI {
 
       this.runner.focus();
     } catch (err: any) {
-      if (this.readyStateEl.classList.contains('hidden')) this.showPlaytestError(err?.message || String(err));
+      if (err instanceof PlaytestLaunchError) {
+        this.showPlaytestError(err.message, err.detail);
+      } else if (this.readyStateEl.classList.contains('hidden')) {
+        this.showPlaytestError(err?.message || String(err));
+      }
     } finally {
       this.isConnecting = false;
       this.setConnectButtonsLoading(false);
@@ -1234,11 +1268,15 @@ export class PlaytestStudioUI {
     }
   }
 
-  private showPlaytestError(panicMessage: string): void {
+  private showPlaytestError(panicMessage: string, launcherOutput?: string): void {
     const ws = getWorkspacePath() || '.';
+    const launchFailed = launcherOutput !== undefined;
+    const logs = launchFailed
+      ? launcherOutput ? ['Game server output:', launcherOutput] : []
+      : this.runner.getConsoleLogs().slice(-30);
     this.lastFailure = {
-      error: 'Phaser playtest error',
-      detail: [panicMessage, '', ...this.runner.getConsoleLogs().slice(-30)].join('\n'),
+      error: launchFailed ? 'Could not start the Phaser game' : 'Phaser playtest error',
+      detail: [panicMessage, '', ...logs].join('\n'),
       workspace: ws
     };
     this.showErrorView(this.lastFailure);
@@ -1533,7 +1571,7 @@ export class PlaytestStudioUI {
     }
   }
 
-  private setConnectButtonsLoading(loading: boolean): void {
+  private setConnectButtonsLoading(loading: boolean, label = 'Connecting...'): void {
     const headerBtn = this.headerEl.querySelector('#btn-build-run') as HTMLButtonElement | null;
     const headerLabel = this.headerEl.querySelector('#build-btn-label');
     const readyBtn = this.viewportEl.querySelector('#btn-ready-build') as HTMLButtonElement | null;
@@ -1542,15 +1580,22 @@ export class PlaytestStudioUI {
     if (readyBtn) {
       readyBtn.disabled = loading;
       readyBtn.innerHTML = loading
-        ? '<span>⏳ Connecting...</span>'
-        : '<span>▶ Connect to game</span>';
+        ? `<span>⏳ ${label}</span>`
+        : '<span>▶ Run game</span>';
     }
     if (headerLabel) {
-      headerLabel.textContent = loading ? '⏳ Connecting...' : '🚀 Run';
+      headerLabel.textContent = loading ? `⏳ ${label}` : '🚀 Run';
     }
   }
 
   private updateHeaderInputsUI(): void {
+    const folderInput = this.viewportEl.querySelector<HTMLInputElement>('#playtest-folder');
+    const workspace = getWorkspacePath();
+    if (folderInput && workspace && (!folderInput.value || folderInput.dataset.autofilled === '1')) {
+      folderInput.value = workspace;
+      folderInput.dataset.autofilled = '1';
+    }
+
     const fullLink = this.headerEl.querySelector('#btn-full-studio') as HTMLAnchorElement | null;
     if (fullLink) {
       fullLink.href = getFullStudioUrl();

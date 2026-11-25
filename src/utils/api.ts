@@ -664,3 +664,46 @@ export async function sendStudioErrorToChat(
 
   return data as SendToChatResponse;
 }
+
+export interface PlaytestStartResult {
+  url: string;
+  gameRoot: string;
+  reused: boolean;
+}
+
+/** An error from the sidecar's game launcher, with the launcher's recent output. */
+export class PlaytestLaunchError extends Error {
+  constructor(message: string, public readonly detail: string = '') {
+    super(message);
+    this.name = 'PlaytestLaunchError';
+  }
+}
+
+/**
+ * Ask the sidecar to start (or reuse) the Phaser game server for a game folder.
+ * Resolves with the local URL the panel connects to.
+ */
+export async function startPlaytest(gameDir: string): Promise<PlaytestStartResult> {
+  const res = await sidecarFetch('/api/playtest/start', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ gameDir: gameDir || getWorkspacePath() }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new PlaytestLaunchError(
+      data.error || `Failed to start the game: HTTP ${res.status}`,
+      typeof data.detail === 'string' ? data.detail : ''
+    );
+  }
+  return data as PlaytestStartResult;
+}
+
+/** Stop the game server the panel started, if any. */
+export async function stopPlaytest(): Promise<void> {
+  await sidecarFetch('/api/playtest/stop', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: '{}',
+  });
+}

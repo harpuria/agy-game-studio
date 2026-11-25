@@ -18,6 +18,11 @@ import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
+import {
+  startPhaserPlaytest,
+  stopPhaserPlaytest,
+  getPhaserPlaytestStatus,
+} from './services/phaser-launcher.mjs';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const pluginRoot = path.resolve(__dirname, '..');
@@ -624,6 +629,20 @@ export async function processSendToChat(body, sidecarApp = null) {
   );
 }
 
+// Starting a game server runs the game's own Vite config, so the standalone handler only
+// accepts JSON requests: a cross-site form or text/plain POST cannot trigger it.
+function requireJsonRequest(req) {
+  const type = String(req.headers?.['content-type'] || '').toLowerCase();
+  if (!type.startsWith('application/json')) {
+    throw createHttpError('Expected an application/json request.', 415);
+  }
+}
+
+function startPlaytestFor(data = {}) {
+  const { workspace } = resolveWorkspaceInfo(data.gameDir || data.workspaceUri || data.workspace);
+  return startPhaserPlaytest(workspace);
+}
+
 /**
  * Registers all Playtest Studio pages and API routes onto an Antigravity `SidecarApp` instance
  * per the official `/ui-extension` specification.
@@ -648,6 +667,7 @@ export function configureSidecarApp(app, ResponseClass) {
       return new ResponseClass(
         JSON.stringify({
           error: err.message,
+          detail: err.detail || undefined,
           statusCode: status,
         }),
         {
@@ -735,6 +755,15 @@ export function configureSidecarApp(app, ResponseClass) {
     wrapApi((data) => resolveWorkspaceInfo(data.workspaceUri || data.workspace)),
     'POST'
   );
+
+  // Start, reuse or stop the Phaser game server for the panel's Run button
+  app.api(
+    '/api/playtest/start',
+    wrapApi((data) => startPlaytestFor(data)),
+    'POST'
+  );
+  app.api('/api/playtest/stop', wrapApi(() => stopPhaserPlaytest()), 'POST');
+  app.api('/api/playtest/status', wrapApi(() => getPhaserPlaytestStatus()), 'GET');
 
   // Send Bug / Build Error to active Antigravity conversation
   app.api(
@@ -854,6 +883,28 @@ export async function handleRequest(req, res) {
       return;
     }
 
+    if (pathname === '/api/playtest/start' && req.method === 'POST') {
+      requireJsonRequest(req);
+      const result = await startPlaytestFor(await parseJsonBody(req));
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify(result));
+      return;
+    }
+
+    if (pathname === '/api/playtest/stop' && req.method === 'POST') {
+      requireJsonRequest(req);
+      const result = await stopPhaserPlaytest();
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify(result));
+      return;
+    }
+
+    if (pathname === '/api/playtest/status' && req.method === 'GET') {
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify(getPhaserPlaytestStatus()));
+      return;
+    }
+
     if (pathname === '/api/send-to-chat' && req.method === 'POST') {
       const body = await parseJsonBody(req, MAX_CHAT_BODY_BYTES);
       const result = await processSendToChat(body, null);
@@ -933,7 +984,7 @@ export async function handleRequest(req, res) {
       res.writeHead(statusCode, { 'Content-Type': 'application/json; charset=utf-8' });
     }
     if (!res.writableEnded) {
-      res.end(JSON.stringify({ error: err.message, statusCode }));
+      res.end(JSON.stringify({ error: err.message, detail: err.detail || undefined, statusCode }));
     }
   }
 }
