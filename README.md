@@ -25,7 +25,7 @@
 
 ## 사용자 설치 (User-Level Installation)
 
-`agy-game-studio`는 미리 빌드된 UI 에셋(`dist/`)을 포함하고 있으며, Antigravity에 내장된 Node.js 런타임과 `sidecar_sdk`를 사용합니다. 사용자로 설치할 때는 **`npm install`이 필요 없고**, **프론트엔드 빌드 단계도 없으며**, **Python이나 `uv`도 설치하지 않습니다**. 번들된 Go MCP 서버(`mcp/`)를 필요할 때 빌드하기 위한 Go 툴체인(`1.26` 이상)만 있으면 됩니다.
+`agy-game-studio`는 미리 빌드된 UI 에셋(`dist/`)을 포함하고 있으며, Antigravity에 내장된 Node.js 런타임과 `sidecar_sdk`를 사용합니다. 사용자로 설치할 때는 **`npm install`이 필요 없고**, **프론트엔드 빌드 단계도 없으며**, **Python이나 `uv`도 설치하지 않습니다**. 번들된 Go MCP 서버(`mcp/`)를 처음 한 번 빌드하기 위한 Go 툴체인(`1.26` 이상)만 있으면 됩니다. 빌드 결과는 `~/Library/Caches/agy-game-studio/mcp/`에 저장되어, 이후에는 `mcp/` 소스가 바뀔 때만 다시 빌드합니다.
 
 게임 자체를 실행하는 데 필요한 도구는 템플릿마다 다릅니다.
 
@@ -218,7 +218,7 @@ flowchart TD
 
 ## 번들 MCP 서버 (`game-studio`, 도구 10개)
 
-`mcp_config.json`은 `scripts/run-mcp.mjs`를 통해 헤드리스 Go 엔진 서버(`mcp/`)를 stdio로 노출합니다. 런처는 Go 모듈을 선언된 의존성으로 빌드한 뒤 실행하며, Python이나 `uv` 없이 Antigravity 에이전트에 10개 도구를 제공합니다.
+`mcp_config.json`은 `scripts/run-mcp.mjs`를 통해 헤드리스 Go 엔진 서버(`mcp/`)를 stdio로 노출합니다. 런처는 Go 모듈을 선언된 의존성으로 빌드해 사용자 캐시 폴더(macOS: `~/Library/Caches/agy-game-studio/mcp/`, `GAME_STUDIO_CACHE_DIR`로 변경 가능)에 저장하고, 소스가 같으면 저장된 실행 파일을 바로 실행합니다. 캐시 폴더에 쓸 수 없으면 임시 폴더에 빌드해 실행합니다. 이 서버는 Python이나 `uv` 없이 Antigravity 에이전트에 10개 도구를 제공합니다.
 
 | 도구 | 용도 |
 | :--- | :--- |
@@ -283,7 +283,7 @@ Antigravity는 사이드카의 `stdout`과 `stderr`를 다음 위치에 기록�
 ```
 
 - **프론트엔드 변경 (`src/`)**: `npm run build`를 실행한 뒤 Game Dev Studio 패널을 새로고침하거나 닫았다가 다시 엽니다. 사이드카 서버는 요청마다 `dist/index.html`, `dist/app.js`, `dist/styles.css`를 디스크에서 새로 읽습니다.
-- **백엔드 또는 MCP 변경 (`server/`, `sidecars/studio/`, `mcp/`)**: `npm test`와 `(cd mcp && go test ./...)`를 실행한 뒤 **Customizations → Installed**(또는 `/plugin`)에서 **Game Dev Studio**(`agy-game-studio`)를 껐다가 다시 켭니다. 다시 활성화하면 백그라운드 사이드카가 재시작되고 `scripts/run-mcp.mjs`가 `mcp/`를 다시 빌드합니다.
+- **백엔드 또는 MCP 변경 (`server/`, `sidecars/studio/`, `mcp/`)**: `npm test`와 `(cd mcp && go test ./...)`를 실행한 뒤 **Customizations → Installed**(또는 `/plugin`)에서 **Game Dev Studio**(`agy-game-studio`)를 껐다가 다시 켭니다. 다시 활성화하면 백그라운드 사이드카가 재시작되고, `mcp/` 소스가 바뀌었다면 `scripts/run-mcp.mjs`가 새로 빌드합니다(바뀌지 않았으면 캐시된 실행 파일을 씁니다).
 - **스킬 변경 (`skills/`)**: 심볼릭 링크된 저장소의 `SKILL.md`와 `references/` 수정 사항은 다음 에이전트 턴부터(또는 플러그인을 껐다 켠 뒤) 반영됩니다.
 
 ---
