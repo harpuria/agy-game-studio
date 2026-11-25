@@ -51,6 +51,11 @@
   - **Player / Primary Unit**: [e.g., `idle`, `walk`, `run`, `jump`, `fall`, `attack`, `hit`, `death`]
   - **Enemies / Interactive Pieces**: [e.g., `idle`, `move`, `attack`, `hit`, `death` or `idle`, `hover`, `match`, `clear`]
 
+- **Art style anchor** (shared by every AI image in the game):
+  - **Style reference image**: `art/references/style.png` — one approved image (key art or a style sheet) passed in `inputImages` to every `image_generate` call so characters, enemies, backgrounds and UI share one look.
+  - **Style prompt line**: [one sentence reused at the start of every image prompt, e.g. "cel-shaded 2D art, thick dark outlines, warm dusk palette, 3/4 top-down view"]
+  - **Palette**: [4-step ramps or hex colors, e.g. from `sprite_extract_palette` on the style reference]
+
 ## Audio and music pipeline (`procedural-sfx`, `procedural-music`, `lyria`)
 
 - **Selected Audio Pipeline Mode**: `[Pure-Code Procedural (.sfx + .music) | Hybrid (.sfx + lyria) | AI Music + Procedural SFX]`
@@ -64,6 +69,20 @@
     - `[ ]` **`procedural-music` Default (Pure-Go SEGA YM2612 4-Op FM + SN76489 PSG)**: Zero-asset 16-bit stereo PCM soundtrack (`8 to 12+` channels with sub-bass/bass anchored in `C1` to `C2`).
     - `[ ]` **`procedural-music` Apple (`apple: true` CoreAudio)**: Real sampled instruments via macOS `gs_instruments.dls`.
     - `[ ]` **`lyria` AI Studio Tracks (`music_generate`)**: 44.1 kHz stereo tracks (`lyria-3.5`, `lyria-3-pro-preview`, or `lyria-3-clip-preview`).
+
+## Asset manifest
+
+One row per file the game loads. Asset skills produce rows in order and set **Status**; engine skills register exactly these keys and files. Add rows only for the current milestone. Paths are relative to the game root: `public/assets/` for Phaser, `game/assets/` for Godot; sources stay in `art/`.
+
+| Key | Kind | Pipeline & tool | Source / prompt | Output file(s) | Size & frames | Tags (frames, ms, loop) | Used in | Status |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| `hero` | sprite sheet | Path A: `image_generate` x2 -> `sprite_normalize` | `art/raw/hero_sheet.png`, grid prompt | `sprites/hero.png`, `sprites/hero.json` | 128x128, 4x4 | idle 0-3 120 pingpong; walk 4-7 100 loop; jump 8-11 100 once | GameScene player | planned |
+| `slime` | sprite sheet | Path B: `sprite_compile` | `art/sprites/slime.sprite` | `sprites/slime.png`, `sprites/slime.json` | 32x32, 4 frames | idle 0-3 150 loop | GameScene enemy | planned |
+| `bg-stage1` | background | `image_generate` 4:1 | style prompt + "ruined spire at dusk" | `backgrounds/stage1.png` | 2K, 4:1 | — | GameScene parallax | planned |
+| `sfx-jump` | SFX | `sfx_synthesize` | `art/sfx/jump.sfx` | `audio/jump.wav` | ~0.2 s | — | player jump | planned |
+| `bgm-stage1` | BGM loop | `music_synthesize` (or `lyria`) | `art/music/stage1.music` | `audio/stage1.wav` | 60 s loop, 8+ tracks | — | GameScene | planned |
+
+**Status** moves `planned` -> `generated` (file exists and the tool report passed) -> `in game` (loaded and checked in the target scene). Keep this table the single list of keys: rename a key here first, then in the code.
 
 ## Scene flow and UI/HUD layout
 

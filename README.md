@@ -139,9 +139,9 @@ flowchart TD
 ```
 
 1. **템플릿을 선택하고 라우터로 시작합니다 (`vibe-game-developer`).** 브라우저 게임은 Phaser Web, Android·iOS 게임은 Godot Mobile, 데스크톱 게임은 Godot PC로 시작합니다. ([지원하는 게임 템플릿](#지원하는-게임-템플릿))
-2. **첫 장면의 목표를 정합니다 (`game-design`).** 채팅에 `/vibe-game-developer Phaser로 30초 동안 별을 모으는 게임을 만들고 싶어. 이동 조작과 한 판이 끝나는 조건부터 정리해 줘.`처럼 요청합니다. 합의한 규칙은 Phaser의 `docs/game/GDD.md`, Godot의 `docs/GDD.md`에 기록합니다.
+2. **첫 장면의 목표를 정합니다 (`game-design`).** 채팅에 `/vibe-game-developer Phaser로 30초 동안 별을 모으는 게임을 만들고 싶어. 이동 조작과 한 판이 끝나는 조건부터 정리해 줘.`처럼 요청합니다. 합의한 규칙은 Phaser의 `docs/game/GDD.md`, Godot의 `docs/GDD.md`에 기록합니다. 이때 첫 플레이 가능 버전에 필요한 에셋을 GDD의 **에셋 목록(Asset manifest)** 표에 한 줄씩 적고, AI 이미지를 쓴다면 모든 이미지가 함께 참고할 **그림체 기준 이미지**(`art/references/style.png`)도 정합니다.
 3. **한 판을 끝까지 구현합니다 (`phaser-web` · `godot-game`).** 이동 → 별 획득 → 점수 표시 → 시간 종료까지 연결합니다. Phaser는 `src/game/`, Godot는 `game/`에 게임 규칙을 두고, 저장·입력·오디오는 템플릿이 제공하는 기능을 사용합니다.
-4. **필요한 에셋을 만들어 붙입니다 (`nano-banana` · `sprite-design` · `procedural-sfx` · `procedural-music` · `lyria`).** “별을 주웠을 때 짧은 효과음을 만들어 연결해 줘”처럼 게임 안에서 언제 쓰이는지 설명하면 MCP 도구로 PNG·WAV를 굽고 장면에 연결합니다.
+4. **필요한 에셋을 만들어 붙입니다 (`nano-banana` · `sprite-design` · `procedural-sfx` · `procedural-music` · `lyria`).** “GDD 에셋 목록대로 에셋을 만들어 줘”나 “별을 주웠을 때 짧은 효과음을 만들어 연결해 줘”처럼 요청하면, MCP 도구로 PNG·JSON·WAV를 굽고 장면에 연결한 뒤 에셋 목록의 상태를 `generated` → `in game`으로 갱신합니다.
 5. **플레이하고 검증한 뒤 배포합니다 (`game-dev-studio` · `phaser-web` · `godot-game`).** 아래 [실행과 검증](#실행과-검증) 방법으로 조작과 피드백을 확인하고, Phaser는 Playtest 패널로 버그 장면을 캡처해 대화에 첨부하면서 반복 개선합니다.
 
 ---
@@ -204,14 +204,14 @@ flowchart TD
 
 절차적 DSL로 직접 작성하든, Nano Banana와 Lyria로 아트와 음악을 생성하든, 에셋은 다음 순서로 게임에 연결합니다.
 
-1. **에셋을 만들거나 생성합니다**: `.sprite`, `.music`, `.sfx` 파일을 작성하거나, `image_generate`로 캐릭터 시트와 배경을, `music_generate`로 배경음악을 만듭니다.
+1. **에셋을 만들거나 생성합니다**: GDD 에셋 목록의 각 줄(키, 출력 파일, 크기, 애니메이션 태그)을 기준으로 `.sprite`, `.music`, `.sfx` 파일을 작성하거나, `image_generate`로 캐릭터 시트와 배경을, `music_generate`로 배경음악을 만듭니다. AI 이미지는 매번 그림체 기준 이미지를 `inputImages`에 함께 넘깁니다.
 2. **게임에서 바로 쓸 수 있는 파일로 굽습니다**:
    - **스프라이트**: `sprite_normalize` 또는 `sprite_compile`로 `.png` 시트와 `.json` 매니페스트를 만듭니다.
    - **오디오**: `sfx_synthesize`, `music_synthesize`, `music_generate`로 `.wav` 또는 `.mp3` 파일을 만듭니다.
-   - MCP 도구에 넘기는 입력·출력 경로는 게임 루트를 기준으로 확인한 뒤 **절대 경로**로 전달합니다.
+   - MCP 도구는 **절대 경로만** 받습니다(상대 경로는 오류). 게임이 읽는 파일은 `public/assets/`(Phaser) 또는 `game/assets/`(Godot)에, 원본 생성물·미리보기·DSL 소스는 배포되지 않는 `art/`에 둡니다. Godot은 `art/.gdignore`를 만들어 import 대상에서 뺍니다.
 3. **템플릿에 등록합니다**:
-   - **Phaser Web**: PNG와 WAV를 `public/assets/` 아래에 두고 `src/game/assets.ts`의 키와 `queueAssets`에 등록합니다. 균일한 시트는 `load.spritesheet('hero', 'hero.png', { frameWidth: 32, frameHeight: 32 })`로 읽고, `this.anims.generateFrameNumbers(...)`로 애니메이션을 등록합니다.
-   - **Godot Mobile · PC**: PNG 시트를 게임 에셋 폴더에 import하고 AnimatedSprite2D의 SpriteFrames에서 프레임 크기에 맞춰 나눕니다. WAV는 AudioStream으로 import한 뒤 템플릿의 AudioManager에 연결합니다.
+   - **Phaser Web**: `src/game/assets.ts`에 키를 두고 `queueAssets`에서 시트는 `load.aseprite('hero', 'sprites/hero.png', 'sprites/hero.json')`, 소리는 `load.audio`로 읽습니다. 애니메이션은 [`skills/phaser-web/scripts/sheetAnims.ts`](skills/phaser-web/scripts/sheetAnims.ts)의 `createSheetAnims(scene, 'hero')`로 등록하면 JSON의 태그대로 `hero-idle`, `hero-walk`… 가 프레임 속도·반복 설정과 함께 만들어집니다.
+   - **Godot Mobile · PC**: PNG·JSON을 `game/assets/sprites/`에 두고 import한 뒤, [`skills/godot-game/scripts/`](skills/godot-game/scripts/)의 두 스크립트를 `game/tools/`에 복사해 `bake_sprite_frames.gd`로 JSON을 SpriteFrames `.tres`로 굽고 AnimatedSprite2D에 연결합니다. WAV는 AudioStream으로 import한 뒤 템플릿의 AudioManager에 연결합니다.
 4. **대상 장면에서 확인합니다**: 애니메이션의 프레임 순서·재생 속도와 소리가 원하는 타이밍에 나오는지 실제 게임에서 확인합니다. Phaser는 Playtest 패널로 문제 장면을 캡처해 대화에 첨부할 수 있습니다.
 
 ---

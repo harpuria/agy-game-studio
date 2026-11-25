@@ -164,11 +164,12 @@ Confirm animation tags, camera projection (`2D side-profile`, `3/4 top-down`, `2
 Work through the stages needed for the user's request and verify each gate before advancing:
 
 1. **Design (`game-design`)**
-   - *Gate*: Core loop, camera projection, controls, win/loss rules, visual/audio pipeline, and save schema are agreed and written to `docs/game/GDD.md` (Phaser) or `docs/GDD.md` (Godot).
+   - *Gate*: Core loop, camera projection, controls, win/loss rules, visual/audio pipeline, art style anchor, save schema, and the *Asset manifest* for the first milestone are agreed and written to `docs/game/GDD.md` (Phaser) or `docs/GDD.md` (Godot).
 2. **Project setup & playable slice (`phaser-web` or `godot-game`)**
    - *Gate*: First playable end-to-end round works (start -> core action -> win/loss -> restart), game rules stay inside `src/game/` (Phaser) or `game/` (Godot), and template services handle saves, settings, input, pause, and audio.
 3. **Visual & audio assets (`sprite-design`, `nano-banana`, `procedural-sfx`, `procedural-music`, `lyria`)**
-   - *Gate*: Assets are baked via MCP tools, visually/acoustically checked, imported into the template, and verified in the live target scene (animations, scale, loop boundaries, SFX cooldowns).
+   - Work through the *Asset manifest* rows in order (style reference first when AI images are used). Each tool call uses the row's output path and tags.
+   - *Gate*: Every manifest row of the milestone is `in game`: baked via MCP tools with a passing report, visually/acoustically checked, imported into the template, and verified in the live target scene (animations, scale, loop boundaries, SFX cooldowns). Placeholder shapes from stage 2 are replaced.
 4. **Verification & playtest (`phaser-web` + `game-dev-studio`, or `godot-game`)**
    - **Phaser Web**: Run `npm run check`; run `npm run test:e2e` for UI/input changes (`E2E_PREVIEW=1 npm run test:e2e` for build/service changes). For interactive playtesting or bug capture, surface `[Game Dev Studio](sidecar://agy-game-studio/studio/playtest)` via `game-dev-studio`.
    - **Godot Mobile**: Run `godot --headless --path . --editor --import --quit` and the affected `tests/integration.tscn` scenarios (default, `--disabled`, `--native`), plus `python3 tools/check_docs.py` if docs changed. Run the scene in the editor (`F5`) or `godot --path .`.

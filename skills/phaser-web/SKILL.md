@@ -76,6 +76,7 @@ export function queueAssets(load: Phaser.Loader.LoaderPlugin, _k = 1) {
 - **Animations**: Copy [`scripts/sheetAnims.ts`](scripts/sheetAnims.ts) to `src/game/sheetAnims.ts` and call `createSheetAnims(this, assetKeys.hero)` once after preload (for example in `PreloadScene.create`). It registers one animation per manifest tag as `hero-idle`, `hero-walk`, … with the tag's speed, `pingpong` as yoyo, and looping unless the tag plays once. Then `sprite.play('hero-walk')`.
   - Do not use `this.anims.createFromAseprite(key)` directly: it names animations by tag alone (a second character's `idle` is skipped) and creates every animation with `repeat: 0`, so loops play only once.
   - For a sheet without a JSON manifest, use `load.spritesheet(key, png, { frameWidth, frameHeight })` and `this.anims.generateFrameNumbers(key, { start, end })`.
+- **Manifest status**: After a key loads and plays correctly in its target scene, set its row in the GDD *Asset manifest* to `in game`.
 - **Gapless BGM**: Prefer `.wav` (from `music_synthesize` or `lyria-3.5`) for looping stage music so MP3 priming padding does not click at loop seams.
 - **Audio playback**: Always go through `this.app.audio.playMusic(key)` and `this.app.audio.sfx(key)`—never call `this.sound.play` directly, so user mute, pause suspension, and platform/ad `setExternalMute` all work automatically.
 

@@ -69,6 +69,7 @@ Bake sprites and audio with `game-studio` MCP tools into `game/assets/` (pass ab
      ```
 
      Each manifest tag becomes one animation with its frame order (`forward`, `reverse`, `pingpong`), speed and loop flag. Assign `hero_frames.tres` to `AnimatedSprite2D.sprite_frames` and `play("idle")`. Re-run the bake whenever the sheet is regenerated. Commit the `.tres`; the exported game does not need the `.json`.
+   - After the animation plays correctly in its target scene, set the sheet's row in the GDD *Asset manifest* to `in game`.
 2. **Audio (`sfx_synthesize`, `music_synthesize`, `music_generate` -> `.wav` / `.mp3`)**:
    - Place `.wav` files under `game/assets/audio/`. Prefer **`.wav`** for gapless looping BGM.
    - For looping BGM `.wav` files, enable `edit/loop_mode=1` (Forward) in the `.wav.import` file (or via the Godot Import dock) and re-import.

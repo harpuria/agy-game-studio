@@ -139,7 +139,7 @@ Consult the reference cards in `references/` for model limits, timing controls, 
 
 ## Paths and import into the game
 
-Every path passed to `music_generate` must be absolute; the tool rejects relative paths. In the examples, replace `<GAME_ROOT>` with the game repository's absolute root. Files the game loads go under `public/assets/audio/` (Phaser) or `game/assets/audio/` (Godot); lyrics and reference images go under `<GAME_ROOT>/art/` so they never ship. See the folder layout in [vibe-game-developer](../vibe-game-developer/SKILL.md#asset-folders-and-paths) and record each finished track in the GDD asset manifest.
+Every path passed to `music_generate` must be absolute; the tool rejects relative paths. In the examples, replace `<GAME_ROOT>` with the game repository's absolute root. Files the game loads go under `public/assets/audio/` (Phaser) or `game/assets/audio/` (Godot); lyrics and reference images go under `<GAME_ROOT>/art/` so they never ship. See the folder layout in [vibe-game-developer](../vibe-game-developer/SKILL.md#asset-folders-and-paths) Start from the track's row in the GDD *Asset manifest* and set its status to `generated` once the file is written and checked.
 
 For Phaser, follow [phaser-web](../phaser-web/SKILL.md) and register the exported file in the game's preload list. For Godot, follow [godot-game](../godot-game/SKILL.md) and confirm the imported resource in the target scene.
 
