@@ -1,13 +1,129 @@
 ---
 name: phaser-web
-description: Phaser 웹 템플릿 파생 게임의 장면, 웹 입력, 에셋 로딩, standalone 또는 CrazyGames 실행과 배포 검증에 사용한다.
+description: >
+  Phaser 4 + TypeScript + Vite web game engineering guide for games built on
+  harpuria/phaser-web-template. Covers template ownership boundaries, safe-area
+  scaling, scene flow, PauseState, MoveInput, Arcade Physics, object pooling,
+  camera/juice, tilemaps, AI/pathfinding, AudioService, Store<T> save schemas
+  and migrations, localized strings, standalone and CrazyGames builds, and
+  Playwright/Vitest verification. Activate when implementing, debugging,
+  optimizing, or shipping a Phaser Web game.
 license: Apache-2.0
+metadata:
+  category: game-dev
+  tags: "phaser, typescript, vite, web-game, crazygames, arcade-physics, gamedev"
+  version: "0.4.0"
 ---
 
-# Phaser Web
+# Phaser Web Game Architecture (`phaser-web-template`)
 
-게임의 `AGENTS.md`와 `docs/game/README.md`에서 시작한다. 설정은 `src/config/game.ts`, 규칙·저장 스키마·문구·에셋 목록은 `src/game/`에 둔다. 프레임워크나 플랫폼 연동을 수정할 때는 `docs/ARCHITECTURE.md`와 실제 서비스 Adapter를 읽는다.
+Build maintainable, 60 FPS browser games on `harpuria/phaser-web-template` (**Phaser 4**, **TypeScript**, **Vite**, **Vitest**, **Playwright**).
 
-- 게임 루트에서 `.nvmrc`에 맞춰 `npm ci` 후 `npm run dev:standalone`으로 데모 또는 변경한 장면을 연다. CrazyGames SDK 작업에는 `docs/CRAZYGAMES.md`와 SDK 개발 모드를 따른다.
-- PNG와 WAV를 게임의 `public/assets/` 아래에 두고 `src/game/assets.ts`의 키와 `queueAssets`에 등록한다. 균일한 시트라면 loader의 현재 경로에 맞춰 `load.spritesheet('hero', 'hero.png', { frameWidth: 32, frameHeight: 32 })`로 읽고, 로딩 후 `this.anims.generateFrameNumbers('hero', { start: 0, end: 3 })` 결과로 애니메이션을 등록한다. 크기·프레임 범위는 생성 결과에 맞춘다.
-- `npm run check`로 검사한다. UI·입력 변경에는 `npm run test:e2e`, 자체 호스팅 배포에는 `npm run build:standalone`, CrazyGames 제출에는 `npm run build:crazygames`를 사용한다. 브라우저와 플랫폼을 명시해 결과를 기록한다.
+---
+
+## Start here (read before editing)
+
+1. Read the game repository's `AGENTS.md` and `docs/game/README.md` (and `docs/game/GDD.md` if present).
+2. Read `docs/ARCHITECTURE.md` before changing initialization, pause handling, storage, layout, or platform service adapters.
+3. Read `docs/CRAZYGAMES.md` before changing CrazyGames SDK calls, `launch` stage, ads, or Data storage.
+4. Confirm the pinned Node version in `.nvmrc` (Node `22.12+`) and dependencies in `package.json` (do not silently upgrade Phaser or template dependencies).
+
+---
+
+## Template boundaries and ownership
+
+| Path | Owner | Rules |
+| :--- | :--- | :--- |
+| `src/config/game.ts` | Game | Configure `title`, `storagePrefix` (unique per game), `width`/`height`, `pixelArt`, `orientation`, `maxRenderScale`, `startScene`, `pausableScenes`, `layout`, `locale`, and `services`. |
+| `src/game/` | Game | Keep game rules, scenes (`scenes.ts` or submodules), session state (`session.ts`), asset manifest (`assets.ts`), save schema (`save.ts`), and all user-facing strings (`strings.ts`) here. |
+| `public/assets/` | Game | Store baked `.png`, `.json`, `.svg`, `.wav`, and `.mp3` assets served relative to `import.meta.env.BASE_URL`. |
+| `src/core/`, `src/services/`, `src/ui/` | Template | Reuse `AudioService`, `MoveInput`, `Store<T>`, `PauseState`, `centerSafeArea`, `transition`, `PlatformServices`, and `SystemUi`. Only edit for shared framework changes after reading `docs/ARCHITECTURE.md`. |
+| `docs/game/` | Game | Store `GDD.md`, systems tables, and design notes. Never write game plans in `docs/template/`. |
+
+**Non-negotiable template contracts**:
+- **Localization**: Add every user-facing string to `src/game/strings.ts` in all supported locales (`ko`, `en`, etc.). Never put UI prose inside `src/core/` or `src/services/`.
+- **E2E selectors**: Find elements in Playwright tests by stable IDs (`tests/e2e/ui.ts`), never by localized copy.
+- **No mock rewards in production**: Wrap real ad/billing SDKs behind `PlatformAdapter`. Never treat `mock: true` completions as real purchases or production ad revenue.
+- **Safe-area coordinates**: Call `centerSafeArea(this, W, H)` at the start of `create()` (or `preload()` in `PreloadScene`). Lay out gameplay inside `0..W` × `0..H`, and extend backgrounds beyond the safe area so `Scale.EXPAND` margins never show empty edges.
+- **Render scale (`k`)**: `App.renderScale` is chosen once at startup (`maxRenderScale`). Rasterize SVGs or load `@2x` PNGs at `k`× and apply `.setScale(1 / k)` in scenes; `centerSafeArea` automatically sharpens `Phaser.GameObjects.Text` at `zoom`. For pixel art, set `gameConfig.pixelArt = true`.
+- **Reduced motion**: Subscribe via `const stop = this.app.listenSettings(...)` for ambient tweens/shake/flashes, and call `stop()` in the scene's `SHUTDOWN` handler.
+
+---
+
+## Asset integration (`game-studio` MCP outputs)
+
+Bake sprite sheets and audio with `game-studio` MCP tools into `public/assets/`, register keys in `src/game/assets.ts`, and queue them in `queueAssets(load, k)`:
+
+```ts
+// src/game/assets.ts
+export const assetKeys = {
+  hero: 'hero',
+  tiles: 'tiles',
+  bgmStage: 'bgm-stage',
+  sfxJump: 'sfx-jump',
+} as const;
+
+export function queueAssets(load: Phaser.Loader.LoaderPlugin, _k = 1) {
+  load.setPath(`${import.meta.env.BASE_URL}assets/`);
+  load.spritesheet(assetKeys.hero, 'hero.png', {
+    frameWidth: 64,
+    frameHeight: 64,
+  });
+  load.image(assetKeys.tiles, 'tiles.png');
+  load.audio(assetKeys.bgmStage, 'stage.wav');
+  load.audio(assetKeys.sfxJump, 'jump.wav');
+}
+```
+
+- **Animations**: Register animations once (check `!this.anims.exists('hero-idle')`) using `this.anims.generateFrameNumbers(assetKeys.hero, { start: 0, end: 3 })` matched to the frame ranges in the baked `.json` manifest.
+- **Gapless BGM**: Prefer `.wav` (from `music_synthesize` or `lyria-3.5`) for looping stage music so MP3 priming padding does not click at loop seams.
+- **Audio playback**: Always go through `this.app.audio.playMusic(key)` and `this.app.audio.sfx(key)`—never call `this.sound.play` directly, so user mute, pause suspension, and platform/ad `setExternalMute` all work automatically.
+
+---
+
+## Core runtime discipline
+
+1. **Clean shutdowns**: Unsubscribe `app.listenSettings`, `scale`, `input`, and scene event listeners on `Phaser.Scenes.Events.SHUTDOWN` so restarting a scene never leaks listeners or duplicate timers.
+2. **Pool high-frequency objects**: Use `Phaser.GameObjects.Group` with `maxSize` and `killAndHide` for bullets, particles, enemies, and floating damage text. Never allocate new graphics or arrays every `update()` frame.
+3. **Clamp `delta`**: In `update(_time, delta)`, clamp `const dt = Math.min(delta, 50) / 1000` so tab switches or frame hiccups do not tunnel entities through walls.
+4. **Pause & gameplay signals**: Put only gameplay scenes in `gameConfig.pausableScenes`. Call `this.app.setGameplay(true)` when the player has active control and `this.app.setGameplay(false)` on menus, overlays, and round end.
+5. **Save safety**: Mutate saves through `app.progress.update(...)` and `flush()` at round end and milestones. When changing `Progress`, bump `progressSchema.version` in `src/game/save.ts`, add a migration, and add a unit test with a previous-version fixture.
+
+---
+
+## Verification, playtesting, and builds
+
+Run all commands from the **game repository root**:
+
+| Task | Command | Notes |
+| :--- | :--- | :--- |
+| First-time install | `npm ci` | Match `.nvmrc` (Node `22.12+`) |
+| Local standalone dev | `npm run dev:standalone` | Fast iteration without CrazyGames SDK |
+| CrazyGames dev mode | `npm run dev:crazygames` | Tests SDK integration and local demo ads |
+| Full static + unit + build check | `npm run check` | Runs `lint`, `format:check`, `test` (Vitest), `typecheck`, `build:verify` |
+| End-to-end UI / input tests | `npm run test:e2e` | Required for UI, layout, or input changes (`embed.spec.ts` checks iframes) |
+| Preview-build E2E | `E2E_PREVIEW=1 npm run test:e2e` | Required when changing build/platform services |
+| CrazyGames live CDN smoke | `npm run test:sdk` | Requires external network + Chromium; writes `test-results/sdk/report.json` |
+| Self-hosted production build | `npm run build:standalone` | Always specify platform target (`vite build` without target aborts) |
+| CrazyGames submission build | `npm run build:crazygames` | Follow `docs/CRAZYGAMES.md` checklist before upload |
+
+**Interactive playtest & bug capture**: Hand off to `game-dev-studio` (`node /path/to/agy-game-studio/scripts/playtest-phaser.mjs` + `[Game Dev Studio](sidecar://agy-game-studio/studio/playtest)`) when the user wants to play inside Antigravity, annotate a frame, or send a 10-second DVR GIF.
+
+**Reporting rule**: Separate checks that actually ran from unverified browsers/devices. If Playwright ran only a subset of projects (e.g., Chromium without Firefox/WebKit), state the exact projects executed.
+
+---
+
+## Reference guides
+
+| Topic | Reference | Key Coverage |
+| :--- | :--- | :--- |
+| **Project structure & config** | [`references/project_structure.md`](references/project_structure.md) | Directory ownership, `gameConfig`, localization (`strings.ts`), E2E IDs |
+| **Scenes, viewport & pause** | [`references/scenes_and_flow.md`](references/scenes_and_flow.md) | Scene lifecycle, `transition`, `centerSafeArea`, `PauseState`, shutdown hygiene |
+| **Input & action mapping** | [`references/input_action_mapping.md`](references/input_action_mapping.md) | `MoveInput`, `isTypingInControl`, discrete actions, gamepad & touch |
+| **Physics & collision** | [`references/physics_and_collision.md`](references/physics_and_collision.md) | Arcade Physics, hitboxes, `collider` vs `overlap`, fixed step & spatial grid |
+| **Entity pooling & lifecycle** | [`references/entity_management.md`](references/entity_management.md) | `Group` pooling, `killAndHide`, state decoupling, zero-churn `update()` |
+| **Camera, tweens & juice** | [`references/camera_and_juice.md`](references/camera_and_juice.md) | Camera follow/shake/flash, hit-stop, squash-and-stretch, particles, `reducedMotion` |
+| **Tilemaps & levels** | [`references/tilemaps_and_levels.md`](references/tilemaps_and_levels.md) | Tiled JSON tilemaps, collision layers, object spawning, isometric/grid helpers |
+| **Pathfinding & AI** | [`references/pathfinding_and_ai.md`](references/pathfinding_and_ai.md) | Grid A*, steering (seek/arrive/separation), enemy FSMs, wave pacing |
+| **Audio & save persistence** | [`references/audio_and_persistence.md`](references/audio_and_persistence.md) | `AudioService`, autoplay unlock, `Store<T>` schemas, migrations, failure states |
+| **UI, HUD & deployment** | [`references/ui_and_deployment.md`](references/ui_and_deployment.md) | HUD scene overlay, `SystemUi` contract, standalone vs CrazyGames builds |

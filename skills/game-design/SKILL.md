@@ -19,6 +19,11 @@ metadata:
 
 Use this skill to turn a rough game idea into a clear, genre-matched **Game Design Document (`GDD.md`)** before writing engine code or generating assets.
 
+**Where `GDD.md` lives** (one location per template so every skill reads the same file):
+- **Phaser Web**: `docs/game/GDD.md`, linked from `docs/game/README.md`.
+- **Godot Mobile / Godot PC**: `docs/GDD.md`, linked from the game's README. Never write game plans into `docs/template/`, which holds template history and procedures.
+- If the game already has a design document in another location, update that file instead of creating a second one.
+
 > [!IMPORTANT]
 > **Genre-agnostic 2D design principle**:
 > Never assume a 2D game uses side-scrolling gravity or platforming physics. Support **every 2D genre**, including:
@@ -43,6 +48,8 @@ Use this skill to turn a rough game idea into a clear, genre-matched **Game Desi
 | :--- | :--- |
 | **`sprite-design`, `nano-banana`** | Delivers sprite resolution (`256x256+` 2D HD vs. `32x32`/`64x64` pixel art), animation tags, two-step AI sheets (`image_generate` -> `sprite_normalize`), or `.sprite` DSL assets (`sprite_compile`). |
 | **`procedural-sfx`, `procedural-music`, `lyria`** | Builds zero-latency `.sfx` sound effects (`sfx_synthesize`), polyphonic `.music` scores (`music_validate` + `music_synthesize`), or `lyria` studio BGM tracks (`music_generate`). |
+| **`phaser-web`** | Implements the GDD scenes, input, assets, saves, and builds in a Phaser Web template game. |
+| **`godot-game`** | Implements the GDD scenes, input, assets, saves, and platform services in a Godot Mobile or Godot PC template game. |
 | **`game-dev-studio`** | Opens `/playtest` in the Game Dev Studio side panel so the user can capture and annotate Phaser gameplay. |
 
 ---
@@ -57,7 +64,7 @@ Align on vision and constraints step by step before generating assets or impleme
    - *Platformer / Shmup / Bullet-Heaven*: `320x180` or `640x360` virtual canvas with `32x32` or `64x64` pixel art, or `1280x720` with `256x256` 2D HD sprites.
    - *Isometric Strategy / Builder*: `1280x720` canvas with `2:1` diamond tiles (`64x32` or `128x64`) and depth-sorted sprites.
 3. **Resolve dependencies in order**: Lock in **Genre and Camera Projection** -> **Simulation and Core Loop** -> **Win/Loss Rules and Controls** -> **Visual Style, Resolution, and Sprite Pipeline** -> **Audio and Music Pipeline** -> **Scene Flow, HUD, and Save Storage**.
-4. **Update the game design in `docs/game/` (Phaser) or the derived game’s `docs/` (Godot)**: Synthesize confirmed choices using [`references/gdd_template.md`](references/gdd_template.md).
+4. **Write `GDD.md` at the template's location** (`docs/game/GDD.md` for Phaser, `docs/GDD.md` for Godot): Synthesize confirmed choices using [`references/gdd_template.md`](references/gdd_template.md).
 
 ---
 
