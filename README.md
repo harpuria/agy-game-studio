@@ -127,10 +127,48 @@ Antigravity 대화에서 `/game-dev-studio`를 입력하면 **Game Dev Studio** 
 
 ## 게임 하나를 만드는 순서
 
-1. **템플릿을 선택합니다.** 브라우저 게임은 Phaser Web, Android·iOS 게임은 Godot Mobile, 데스크톱 게임은 Godot PC로 시작합니다. ([지원하는 게임 템플릿](#지원하는-게임-템플릿))
-2. **첫 장면의 목표를 정합니다.** 채팅에 `/vibe-game-developer Phaser로 30초 동안 별을 모으는 게임을 만들고 싶어. 이동 조작과 한 판이 끝나는 조건부터 정리해 줘.`처럼 요청합니다. 합의한 규칙은 Phaser의 `docs/game/`, Godot의 `docs/`에 기록합니다.
-3. **한 판을 끝까지 구현합니다.** 예를 들어 이동 → 별 획득 → 점수 표시 → 시간 종료까지 연결합니다. Phaser는 `src/game/`, Godot는 `game/`에 게임 규칙을 두고, 저장·입력·오디오는 템플릿이 제공하는 기능을 사용합니다.
-4. **에셋을 붙이고 플레이합니다.** “별을 주웠을 때 짧은 효과음을 만들어 연결해 줘”처럼 게임 안에서 언제 쓰이는지 설명합니다. 아래 [실행과 검증](#실행과-검증) 방법으로 조작과 피드백을 확인하고, 발견한 문제를 고쳐 다시 검증합니다.
+```mermaid
+flowchart TD
+    Start["0. 시작 · /vibe-game-developer (템플릿 판별 및 작업 라우팅)"] --> Design["1. 기획 · game-design (GDD 작성: docs/game/GDD.md 또는 docs/GDD.md)"]
+
+    Design --> Engine{"2. 엔진 구현"}
+    Engine -->|"Phaser Web"| Phaser["phaser-web (장면·입력·저장·빌드)"]
+    Engine -->|"Godot Mobile · PC"| Godot["godot-game (장면·Autoload·플랫폼 서비스)"]
+
+    Design --> Visual{"3-A. 비주얼 에셋"}
+    Visual -->|"AI 2단계 (캐릭터·배경)"| Nano["nano-banana (image_generate)"]
+    Nano --> SpriteNorm["sprite-design (sprite_normalize → PNG·JSON)"]
+    Visual -->|"절차적 DSL (타일·투사체)"| SpriteDSL["sprite-design (sprite_compile → PNG·JSON)"]
+
+    Design --> Audio{"3-B. 오디오 에셋"}
+    Audio -->|"효과음"| ProcSFX["procedural-sfx (sfx_synthesize → WAV)"]
+    Audio -->|"절차적 BGM"| ProcMus["procedural-music (music_validate · synthesize → WAV)"]
+    Audio -->|"AI BGM · 노래"| Lyria["lyria (music_generate → WAV·MP3)"]
+
+    SpriteNorm --> Integrate["4. 에셋 연결 (Phaser: public/assets · Godot: game/assets)"]
+    SpriteDSL --> Integrate
+    ProcSFX --> Integrate
+    ProcMus --> Integrate
+    Lyria --> Integrate
+
+    Integrate --> Phaser
+    Integrate --> Godot
+
+    Phaser --> VerifyWeb["5-A. 검증 · phaser-web (npm run check · test:e2e) + game-dev-studio (Playtest · 주석 · GIF)"]
+    Godot --> VerifyGodot["5-B. 검증 · godot-game (F5 · integration.tscn · tools/validate.sh)"]
+
+    VerifyWeb -->|"버그 수정·다듬기"| Phaser
+    VerifyGodot -->|"버그 수정·다듬기"| Godot
+
+    VerifyWeb --> ShipWeb["6-A. 배포 · standalone / CrazyGames"]
+    VerifyGodot --> ShipGodot["6-B. 배포 · Google Play · ONE store · App Store / Steam · itch.io"]
+```
+
+1. **템플릿을 선택하고 라우터로 시작합니다 (`vibe-game-developer`).** 브라우저 게임은 Phaser Web, Android·iOS 게임은 Godot Mobile, 데스크톱 게임은 Godot PC로 시작합니다. ([지원하는 게임 템플릿](#지원하는-게임-템플릿))
+2. **첫 장면의 목표를 정합니다 (`game-design`).** 채팅에 `/vibe-game-developer Phaser로 30초 동안 별을 모으는 게임을 만들고 싶어. 이동 조작과 한 판이 끝나는 조건부터 정리해 줘.`처럼 요청합니다. 합의한 규칙은 Phaser의 `docs/game/GDD.md`, Godot의 `docs/GDD.md`에 기록합니다.
+3. **한 판을 끝까지 구현합니다 (`phaser-web` · `godot-game`).** 이동 → 별 획득 → 점수 표시 → 시간 종료까지 연결합니다. Phaser는 `src/game/`, Godot는 `game/`에 게임 규칙을 두고, 저장·입력·오디오는 템플릿이 제공하는 기능을 사용합니다.
+4. **필요한 에셋을 만들어 붙입니다 (`nano-banana` · `sprite-design` · `procedural-sfx` · `procedural-music` · `lyria`).** “별을 주웠을 때 짧은 효과음을 만들어 연결해 줘”처럼 게임 안에서 언제 쓰이는지 설명하면 MCP 도구로 PNG·WAV를 굽고 장면에 연결합니다.
+5. **플레이하고 검증한 뒤 배포합니다 (`game-dev-studio` · `phaser-web` · `godot-game`).** 아래 [실행과 검증](#실행과-검증) 방법으로 조작과 피드백을 확인하고, Phaser는 Playtest 패널로 버그 장면을 캡처해 대화에 첨부하면서 반복 개선합니다.
 
 ---
 
