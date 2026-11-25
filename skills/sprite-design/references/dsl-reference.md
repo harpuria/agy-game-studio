@@ -197,7 +197,7 @@ tag <name> frames=<1..256> [duration=<ms>|fps=<num>] [loop=<loop|once|pingpong|r
 
 ### 5.2 Non-Commutative 2D Matrix Transformation Order
 
-Both the procedural SDF rasterizer (`Transform2D.GetGeoM`) and Ebitengine runtime drawing apply 2D affine matrices in strict order (`Pivot -> Scale/Squash -> Rotate -> World Translation`):
+The procedural SDF rasterizer applies 2D affine matrices in strict order (`Pivot -> Scale/Squash -> Rotate -> World Translation`):
 
 $$M = T(X + O_x, Y + O_y) \cdot R(\theta) \cdot S(S_x, S_y) \cdot T(-O_x, -O_y)$$
 

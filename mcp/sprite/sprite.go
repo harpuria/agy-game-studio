@@ -29,7 +29,7 @@ import (
 )
 
 // PremultiplyRGBA converts straight 8-bit R, G, B, A channels into an
-// Ebitengine-compliant premultiplied color.RGBA where R, G, B <= A.
+// premultiplied color.RGBA where R, G, B <= A.
 func PremultiplyRGBA(r, g, b, a uint8) color.RGBA {
 	if a == 0 {
 		return color.RGBA{0, 0, 0, 0}
@@ -47,7 +47,7 @@ func PremultiplyRGBA(r, g, b, a uint8) color.RGBA {
 }
 
 // ValidatePremultipliedRGBA checks that every pixel in an *image.RGBA buffer
-// obeys Ebitengine's premultiplied alpha invariant (R <= A, G <= A, B <= A).
+// obeys the premultiplied alpha invariant (R <= A, G <= A, B <= A).
 func ValidatePremultipliedRGBA(img *image.RGBA) error {
 	if img == nil {
 		return fmt.Errorf("validate premultiplied RGBA: image is nil")
@@ -469,7 +469,7 @@ func EvalEasing(name string, t float64) (float64, error) {
 	}
 }
 
-// LoopMode controls how an Ebitengine AnimationTag advances through its frames.
+// LoopMode controls how an AnimationTag advances through its frames.
 type LoopMode int
 
 const (

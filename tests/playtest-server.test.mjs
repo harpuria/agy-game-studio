@@ -20,7 +20,7 @@ import os from 'node:os';
 import { pathToFileURL } from 'node:url';
 import { startServer } from '../server/index.mjs';
 
-describe('Playtest Studio Sidecar Server & WASM Builder Integration Tests', () => {
+describe('Playtest Studio Sidecar Server Integration Tests', () => {
   let srv;
   let baseUrl;
   let tempRootDir;
@@ -93,134 +93,13 @@ process.stdout.write('ok\\n');
     assert.equal(activeData.sessionId, testSessionId);
   });
 
-  it('GET /api/playtest/wasm_exec.js streams valid Go WASM JavaScript runtime', async () => {
-    const res = await fetch(`${baseUrl}/api/playtest/wasm_exec.js`);
-    assert.equal(res.status, 200);
-    assert.match(res.headers.get('content-type') || '', /application\/javascript/);
-
-    const text = await res.text();
-    assert.ok(text.length > 1000, 'wasm_exec.js should be non-trivial');
-    assert.ok(
-      text.includes('globalThis.Go') || text.includes('class Go') || text.includes('gojs'),
-      'wasm_exec.js should define the Go WASM runtime'
-    );
-  });
-
-  it('POST /api/playtest/build compiles valid Go main.go into a real WASM binary with \\0asm magic bytes', async () => {
-    const validGoDir = path.join(tempRootDir, 'valid-go-game');
-    fs.mkdirSync(validGoDir, { recursive: true });
-    fs.writeFileSync(
-      path.join(validGoDir, 'go.mod'),
-      'module example.com/validgame\n\ngo 1.21\n'
-    );
-    fs.writeFileSync(
-      path.join(validGoDir, 'main.go'),
-      'package main\n\nimport "fmt"\n\nfunc main() {\n\tfmt.Println("Playtest WASM ready")\n}\n'
-    );
-
-    const buildRes = await fetch(`${baseUrl}/api/playtest/build`, {
+  it('resolves the host workspace URI for game reports', async () => {
+    const response = await fetch(`${baseUrl}/api/workspace/resolve`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ workspace: validGoDir }),
+      body: JSON.stringify({ workspaceUri: pathToFileURL(tempRootDir).href }),
     });
-
-    assert.equal(buildRes.status, 200);
-    const buildData = await buildRes.json();
-    assert.equal(buildData.status, 'ok');
-    assert.ok(buildData.buildId, 'buildId should be returned');
-    assert.equal(buildData.pkg, '.');
-    assert.ok(buildData.wasmBytes > 1000, 'Compiled WASM should have non-zero size');
-    assert.equal(buildData.wasmUrl, `/api/playtest/wasm?buildId=${buildData.buildId}`);
-    assert.equal(buildData.wasmExecUrl, '/api/playtest/wasm_exec.js');
-
-    // Fetch the compiled WASM binary and verify \0asm magic header [0x00, 0x61, 0x73, 0x6d]
-    const wasmRes = await fetch(`${baseUrl}${buildData.wasmUrl}`);
-    assert.equal(wasmRes.status, 200);
-    assert.equal(wasmRes.headers.get('content-type'), 'application/wasm');
-    assert.equal(wasmRes.headers.get('cache-control'), 'no-store');
-
-    const wasmBuf = Buffer.from(await wasmRes.arrayBuffer());
-    assert.equal(wasmBuf.length, buildData.wasmBytes);
-    assert.deepEqual(
-      [wasmBuf[0], wasmBuf[1], wasmBuf[2], wasmBuf[3]],
-      [0x00, 0x61, 0x73, 0x6d],
-      'WASM binary must start with \\0asm magic bytes [0x00, 0x61, 0x73, 0x6d]'
-    );
-
-    // Verify GET /api/playtest/runner serves sidecar-hosted runner HTML with wasm-unsafe-eval CSP
-    const runnerRes = await fetch(
-      `${baseUrl}/api/playtest/runner?buildId=${encodeURIComponent(buildData.buildId)}&runnerId=1`
-    );
-    assert.equal(runnerRes.status, 200);
-    assert.match(runnerRes.headers.get('content-security-policy') || '', /wasm-unsafe-eval/);
-    const runnerHtml = await runnerRes.text();
-    assert.ok(runnerHtml.includes(buildData.buildId));
-    assert.ok(runnerHtml.includes('WebAssembly.instantiate'));
-  });
-
-  it('POST /api/playtest/build auto-discovers ./cmd/* package when root has no .go files', async () => {
-    const cmdGoDir = path.join(tempRootDir, 'cmd-go-game');
-    const subCmdDir = path.join(cmdGoDir, 'cmd', 'mygame');
-    fs.mkdirSync(subCmdDir, { recursive: true });
-    fs.writeFileSync(
-      path.join(cmdGoDir, 'go.mod'),
-      'module example.com/cmdgame\n\ngo 1.21\n'
-    );
-    fs.writeFileSync(
-      path.join(subCmdDir, 'main.go'),
-      'package main\n\nfunc main() {}\n'
-    );
-
-    const workspaceFileUri = pathToFileURL(cmdGoDir).href;
-    const resolveRes = await fetch(`${baseUrl}/api/workspace/resolve`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ workspaceUri: workspaceFileUri }),
-    });
-    assert.equal(resolveRes.status, 200);
-    const resolveData = await resolveRes.json();
-    assert.equal(resolveData.workspace, path.resolve(cmdGoDir));
-    assert.equal(resolveData.pkg, './cmd/mygame');
-
-    const buildRes = await fetch(`${baseUrl}/api/playtest/build`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ workspace: workspaceFileUri }),
-    });
-
-    assert.equal(buildRes.status, 200);
-    const buildData = await buildRes.json();
-    assert.equal(buildData.status, 'ok');
-    assert.equal(buildData.pkg, './cmd/mygame');
-  });
-
-  it('POST /api/playtest/build fails fast with HTTP 422 and exact compiler stderr on broken Go code', async () => {
-    const brokenGoDir = path.join(tempRootDir, 'broken-go-game');
-    fs.mkdirSync(brokenGoDir, { recursive: true });
-    fs.writeFileSync(
-      path.join(brokenGoDir, 'go.mod'),
-      'module example.com/brokengame\n\ngo 1.21\n'
-    );
-    fs.writeFileSync(
-      path.join(brokenGoDir, 'main.go'),
-      'package main\n\nfunc main() {\n\tundefinedSymbolForPlaytestTest()\n}\n'
-    );
-
-    const buildRes = await fetch(`${baseUrl}/api/playtest/build`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ workspace: brokenGoDir, pkg: '.' }),
-    });
-
-    assert.equal(buildRes.status, 422);
-    const errData = await buildRes.json();
-    assert.equal(errData.error, 'Go WASM compilation failed');
-    assert.ok(
-      errData.compilerOutput.includes('undefinedSymbolForPlaytestTest'),
-      `Expected compilerOutput to contain undefinedSymbolForPlaytestTest, got: ${errData.compilerOutput}`
-    );
-    assert.equal(errData.pkg, '.');
-    assert.notEqual(errData.exitCode, 0);
+    assert.deepEqual(await response.json(), { workspace: tempRootDir });
   });
 
   it('POST /api/send-to-chat rejects path traversal and saves valid annotated screenshot + console logs via agentapi', async () => {
@@ -253,7 +132,7 @@ process.stdout.write('ok\\n');
           frameOffset: '-1.5s',
           resolution: '640x480',
         },
-        consoleLogs: ['[WASM] frame=120 collision=false', 'panic: nil bounds'],
+        consoleLogs: ['[Phaser] frame=120 collision=false', 'panic: nil bounds'],
       }),
     });
 
@@ -270,7 +149,7 @@ process.stdout.write('ok\\n');
     assert.equal(captured.args[2], testSessionId);
     assert.ok(captured.args[3].includes('![hitbox-bug.png]('));
     assert.ok(captured.args[3].includes('**Bug Note**: Player clips through right platform corner'));
-    assert.ok(captured.args[3].includes('### Captured WASM Console / Stderr'));
+    assert.ok(captured.args[3].includes('### Captured Game Console'));
     assert.ok(captured.args[3].includes('panic: nil bounds'));
 
     // 3. Valid buildError payload
@@ -281,8 +160,8 @@ process.stdout.write('ok\\n');
         session_id: testSessionId,
         workspace: '/path/to/game',
         pkg: './cmd/game',
-        note: 'Fails when building for js/wasm',
-        buildError: './main.go:14:2: undefined: ebiten.RunGame',
+        note: 'Game scene failed',
+        buildError: 'Uncaught TypeError in game scene',
       }),
     });
 
@@ -293,10 +172,10 @@ process.stdout.write('ok\\n');
 
     const capturedErr = JSON.parse(fs.readFileSync(agentApiCaptureFile, 'utf-8'));
     assert.equal(capturedErr.args[0], 'send-message');
-    assert.equal(capturedErr.args[1], '--title=Playtest WASM Build Error');
+    assert.equal(capturedErr.args[1], '--title=Phaser Playtest Error');
     assert.equal(capturedErr.args[2], testSessionId);
-    assert.ok(capturedErr.args[3].includes('### 🚨 Ebitengine WASM Build Error'));
-    assert.ok(capturedErr.args[3].includes('undefined: ebiten.RunGame'));
+    assert.ok(capturedErr.args[3].includes('### 🚨 Phaser Playtest Error'));
+    assert.ok(capturedErr.args[3].includes('Uncaught TypeError in game scene'));
 
     // 4. Valid studioError payload (from "💬 Send to Agent" button on error toast)
     const studioErrRes = await fetch(`${baseUrl}/api/send-to-chat`, {

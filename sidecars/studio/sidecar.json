@@ -1,9 +1,11 @@
 {
   "command": "node",
-  "args": ["main.mjs"],
+  "args": [
+    "main.mjs"
+  ],
   "restart_policy": "always",
   "display_name": "Game Dev Studio",
-  "description": "Game Dev Studio for Go and Ebitengine featuring a live 60 FPS WASM Playtest panel with a 10-second DVR rewind buffer, visual bug annotation, and animated GIF export.",
+  "description": "Phaser playtesting with frame capture, annotations and animated GIF reports.",
   "has_web_ui": true,
   "ui_config": {
     "display_name": "Game Dev Studio",

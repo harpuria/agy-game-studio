@@ -621,7 +621,7 @@ body.studio-mode-full #app-root {
   overflow: hidden;
 }
 
-.wasm-runner-mount {
+.game-runner-mount {
   width: 100%;
   height: 100%;
   display: flex;
@@ -629,7 +629,7 @@ body.studio-mode-full #app-root {
   justify-content: center;
 }
 
-.wasm-runner-iframe {
+.game-runner-iframe {
   width: 100%;
   height: 100%;
   border: none;

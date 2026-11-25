@@ -1,13 +1,6 @@
 ---
 name: nano-banana
-description: >
-  Conversational image generation and multimodal editing with Google Nano
-  Banana models via the game-studio MCP image_generate tool. Supports
-  nano-banana-2.1 (default), nano-banana-2, nano-banana-2-lite, and
-  nano-banana-pro across 14 aspect ratios, up to 4K resolution, up to 14
-  reference images, and Search grounding. Bakes .png art, parallax layers,
-  and 4x4 chroma-key sprite grids for sprite_normalize and //go:embed in
-  Ebitengine.
+description: Generate game artwork and sprite grids using the image_generate tool, then normalize animation frames.
 license: Apache-2.0
 metadata:
   category: media
@@ -99,7 +92,7 @@ Consult the model cards in `references/` for complete resolution grids, token bu
   "tool": "image_generate",
   "arguments": {
     "prompt": "A seamless 2D side-scrolling pixel-art parallax background of a synthwave city skyline at dusk, clean horizon",
-    "outPath": "internal/assets/backgrounds/synthwave_parallax.png",
+    "outPath": "assets/backgrounds/synthwave_parallax.png",
     "model": "nano-banana-2.1",
     "resolution": "2K",
     "aspectRatio": "4:1",
@@ -115,7 +108,7 @@ Consult the model cards in `references/` for complete resolution grids, token bu
   "tool": "image_generate",
   "arguments": {
     "prompt": "A minimalist flat illustration of a ruby potion bottle icon on a dark UI card",
-    "outPath": "internal/assets/ui/potion_icon.png",
+    "outPath": "assets/ui/potion_icon.png",
     "model": "nano-banana-2-lite",
     "aspectRatio": "1:1",
     "enterprise": true,
@@ -151,16 +144,10 @@ Splitting character design from animation grid generation keeps proportions and 
 
 ---
 
-## Baking and `//go:embed` in Ebitengine
+## Import into the game
 
-Save final baked backgrounds, portraits, card illustrations, and normalized sprite sheets (`.png`, `.json`, `.aseprite`) under `internal/assets/` so your Go Ebitengine binary embeds them cleanly via `//go:embed` with zero runtime API keys or network dependencies:
+Choose output paths in the game's asset directory. For Phaser, follow [phaser-web](../phaser-web/SKILL.md) and register the exported file in the game's preload list. For Godot, follow [godot-game](../godot-game/SKILL.md) and confirm the imported resource in the target scene.
 
-```go
-//go:embed assets/backgrounds/synthwave_parallax.png
-var parallaxPNG []byte
-```
-
----
 
 ## Prompting best practices
 

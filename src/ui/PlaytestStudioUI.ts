@@ -19,17 +19,14 @@ import {
   setSessionId,
   onSessionChange,
   getWorkspacePath,
-  setWorkspacePath,
   onWorkspaceChange,
   getFullStudioUrl,
-  resolveWorkspaceUri,
   syncWorkspaceFromHost,
   fetchRecentSessions,
-  buildWasm,
   sendBugToChat,
   sendBuildErrorToChat,
   sendStudioErrorToChat,
-  type BuildWasmFailure
+  type PlaytestFailure
 } from '../utils/api.ts';
 import { FrameDvrBuffer } from '../engine/FrameDvrBuffer.ts';
 import {
@@ -37,14 +34,13 @@ import {
   QA_COLOR_SWATCHES,
   type AnnotationTool
 } from '../engine/BugAnnotator.ts';
-import { WasmRunner } from '../engine/WasmRunner.ts';
+import { PhaserRunner } from '../engine/PhaserRunner.ts';
 import {
   encodeAnimatedGif,
   gifBytesToDataUrl,
   detectActiveViewportBounds,
   type GifFrameInput
 } from '../engine/GifEncoder.ts';
-import { openStudioProjectModal } from './StudioModals.ts';
 
 export class StudioNotifier {
   private static container: HTMLElement | null = null;
@@ -240,14 +236,13 @@ export class PlaytestStudioUI {
 
   public readonly dvrBuffer: FrameDvrBuffer;
   public readonly annotator: BugAnnotator;
-  public readonly runner: WasmRunner;
+  public readonly runner: PhaserRunner;
 
-  private activePkg = '.';
   private activeDvrIndex = 0;
   private keypadVisible = false;
   private logsDrawerVisible = false;
-  private isBuilding = false;
-  private lastBuildFailure: BuildWasmFailure | null = null;
+  private isConnecting = false;
+  private lastFailure: PlaytestFailure | null = null;
 
   private runnerMountEl!: HTMLElement;
   private annotationStageEl!: HTMLElement;
@@ -291,7 +286,7 @@ export class PlaytestStudioUI {
       onHistoryChange: () => this.updateAnnotationControlsUI()
     });
 
-    this.runner = new WasmRunner(this.runnerMountEl, this.dvrBuffer, {
+    this.runner = new PhaserRunner(this.runnerMountEl, this.dvrBuffer, {
       onFrameRecorded: () => {
         this.activeDvrIndex = Math.max(0, this.dvrBuffer.length - 1);
         this.updateDvrScrubberUI();
@@ -317,30 +312,12 @@ export class PlaytestStudioUI {
       },
       onPanic: (message, allLogs) => {
         this.updateLogsUI(allLogs);
-        this.showRuntimePanicView(message);
+        this.showPlaytestError(message);
       }
     });
 
     this.bindEvents();
     void this.syncSessionAndWorkspaceFromServer();
-  }
-
-  private async applyWorkspaceUri(workspaceUri: string): Promise<boolean> {
-    if (!workspaceUri || !workspaceUri.trim()) {
-      return false;
-    }
-    try {
-      const resolved = await resolveWorkspaceUri(workspaceUri);
-      if (resolved.workspace) {
-        setWorkspacePath(resolved.workspace);
-      }
-      this.activePkg = '.';
-      this.updateHeaderInputsUI();
-      return Boolean(resolved.hasGoMod);
-    } catch (err) {
-      console.warn('[PlaytestStudioUI] Failed to resolve workspace URI:', err);
-      return false;
-    }
   }
 
   private async syncSessionAndWorkspaceFromServer(): Promise<void> {
@@ -349,40 +326,7 @@ export class PlaytestStudioUI {
     this.updateSessionBadgeUI();
   }
 
-  private formatProjectBadgeLabel(workspacePath: string, pkg: string): string {
-    const trimmed = (workspacePath || '').trim().replace(/\/+$/, '');
-    if (!trimmed) {
-      return 'No project selected';
-    }
-    const parts = trimmed.split('/').filter(Boolean);
-    const baseName = parts[parts.length - 1] || trimmed;
-    const cleanPkg = (pkg || '.').trim() || '.';
-    return `${baseName} (${cleanPkg})`;
-  }
-
-  private openProjectPicker(): void {
-    openStudioProjectModal({
-      currentWorkspace: getWorkspacePath(),
-      currentPkg: this.activePkg,
-      onSelectProject: (workspacePath: string, pkg: string) => {
-        setWorkspacePath(workspacePath);
-        this.activePkg = (pkg || '.').trim() || '.';
-        this.updateHeaderInputsUI();
-        StudioNotifier.info(
-          `Selected project: ${this.formatProjectBadgeLabel(workspacePath, this.activePkg)}`,
-          2400
-        );
-      }
-    });
-  }
-
   private renderHeader(): void {
-    const ws = getWorkspacePath();
-    const badgeLabel = this.formatProjectBadgeLabel(ws, this.activePkg);
-    const badgeTooltip = ws
-      ? `${ws} (${this.activePkg || '.'}) — Click to switch project`
-      : 'Click to open a Go game project';
-
     this.headerEl.innerHTML = `
       <div class="header-left">
         <button
@@ -397,37 +341,12 @@ export class PlaytestStudioUI {
         </button>
 
         <div class="workspace-controls">
-          <input
-            type="hidden"
-            id="workspace-input"
-            value="${this.escapeAttr(ws)}"
-          />
-          <button
-            type="button"
-            id="btn-open-project"
-            class="btn btn-sm btn-outline btn-header-action"
-            data-tooltip="Open Go Game Project &amp; Package"
-            title="Open Go Game Project &amp; Package"
-          >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-            <span class="btn-label">Open Project</span>
-          </button>
-          <button
-            type="button"
-            id="playtest-project-label"
-            class="btn btn-sm btn-ghost"
-            style="font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; max-width: 240px; overflow: hidden; text-overflow: ellipsis; border: 1px solid var(--studio-border);"
-            title="${this.escapeAttr(badgeTooltip)}"
-            aria-label="Active Go project and package"
-          >
-            ${this.escapeHtml(badgeLabel)}
-          </button>
           <button
             type="button"
             id="btn-build-run"
             class="btn btn-primary btn-sm"
-            data-tooltip="Compile Go to WASM &amp; Launch (GOOS=js GOARCH=wasm)"
-            title="Compile Go to WASM &amp; Launch (GOOS=js GOARCH=wasm)"
+            data-tooltip="Connect to Phaser"
+            title="Connect to Phaser"
           >
             <span id="build-btn-label">🚀 Run</span>
           </button>
@@ -472,9 +391,9 @@ export class PlaytestStudioUI {
           type="button"
           id="btn-logs-toggle"
           class="btn btn-ghost btn-icon-badge"
-          data-tooltip="WASM Console &amp; Stderr Logs"
-          title="Toggle WASM Console &amp; Stderr Logs"
-          aria-label="Toggle WASM Console and Stderr Logs"
+          data-tooltip="Game Console"
+          title="Toggle Game Console"
+          aria-label="Toggle Game Console"
         >
           <span>📟</span>
           <span id="logs-count-badge" class="badge-pill">0</span>
@@ -646,65 +565,56 @@ export class PlaytestStudioUI {
   }
 
   private renderViewport(): void {
-    const ws = getWorkspacePath();
     this.viewportEl.innerHTML = `
-      <!-- 1. Ready State (before first WASM build) -->
+      <!-- 1. Ready State (before connecting) -->
       <div id="viewport-ready-state" class="viewport-state-panel">
         <div class="ready-card">
           <div class="ready-icon-badge">🎮</div>
-          <h2 class="ready-title">Ebitengine Live Playtest &amp; Visual QA</h2>
+          <h2 class="ready-title">Phaser Playtest</h2>
           <p class="ready-subtitle">
-            Compile your Go game to WebAssembly (<code>GOOS=js GOARCH=wasm</code>), play inline at 60 FPS,
-            pause with <kbd>F8</kbd> or <kbd>\`</kbd> to scrub the 10-second DVR ring buffer, circle visual bugs, and send directly to Antigravity chat.
+            From the Phaser game directory, run the plugin’s <code>scripts/playtest-phaser.mjs</code> with Node.
+            Connect to its local Vite URL, then press <kbd>F8</kbd> to annotate a frame.
           </p>
 
           <div class="ready-form-row">
             <div class="ready-field">
-              <label for="ready-workspace-input">Go Project or Package Directory</label>
+              <label for="playtest-url">Phaser playtest URL</label>
               <div style="display: flex; align-items: center; gap: 6px;">
                 <input
-                  type="text"
-                  id="ready-workspace-input"
+                  type="url"
+                  id="playtest-url"
                   class="input-text"
                   style="flex: 1;"
-                  placeholder="/path/to/ebitengine-game or /path/to/repo/cmd/game"
-                  value="${this.escapeAttr(ws)}"
+                  placeholder="http://127.0.0.1:5173"
+                  value="http://127.0.0.1:5173"
                 />
-                <button
-                  type="button"
-                  id="btn-ready-open-project"
-                  class="btn btn-outline btn-sm"
-                  title="Browse Go Project &amp; Package"
-                >
-                  📂 Open Project
-                </button>
               </div>
             </div>
           </div>
 
           <div class="ready-actions">
             <button type="button" id="btn-ready-build" class="btn btn-primary btn-lg">
-              <span>▶ Compile &amp; Launch Ebitengine WASM</span>
+              <span>▶ Connect to game</span>
             </button>
           </div>
         </div>
       </div>
 
-      <!-- 2. Build Error / Runtime Panic State (HTTP 422 fail-fast view) -->
+      <!-- 2. Connection or runtime error -->
       <div id="viewport-error-state" class="viewport-state-panel hidden">
         <div class="error-card">
           <div class="error-card-header">
             <div class="error-title-wrap">
               <span class="error-badge-icon">🚨</span>
               <div>
-                <h3 id="error-state-title" class="error-card-title">Go WASM Compilation Failed</h3>
+                <h3 id="error-state-title" class="error-card-title">Playtest connection failed</h3>
                 <div id="error-state-meta" class="error-card-meta"></div>
               </div>
             </div>
             <div class="error-card-actions">
-              <button type="button" id="btn-retry-build" class="btn btn-outline btn-sm">🔄 Retry Build</button>
+              <button type="button" id="btn-retry-build" class="btn btn-outline btn-sm">🔄 Reconnect</button>
               <button type="button" id="btn-send-build-error" class="btn btn-danger btn-sm">
-                <span>🚨 Send Build Error to Chat</span>
+                <span>🚨 Send Game Error to Chat</span>
               </button>
             </div>
           </div>
@@ -714,7 +624,7 @@ export class PlaytestStudioUI {
 
       <!-- 3. Active Game + Frozen DVR Annotation Stage -->
       <div id="viewport-game-stage" class="viewport-game-stage hidden">
-        <div id="wasm-runner-mount" class="wasm-runner-mount"></div>
+        <div id="game-runner-mount" class="game-runner-mount"></div>
 
         <div id="annotation-stage" class="annotation-stage hidden">
           <div class="annotation-canvas-wrapper">
@@ -745,16 +655,16 @@ export class PlaytestStudioUI {
           </div>
         </div>
 
-        <!-- Collapsible WASM Console & Stderr Drawer -->
+        <!-- Collapsible Game Console Drawer -->
         <div id="logs-drawer" class="logs-drawer hidden">
           <div class="logs-drawer-header">
-            <span>WASM Console &amp; Runtime Logs (Last 200 lines)</span>
+            <span>Game Console &amp; Runtime Logs (Last 200 lines)</span>
             <div class="logs-drawer-actions">
               <button type="button" id="btn-clear-logs" class="btn btn-ghost btn-sm">Clear</button>
               <button type="button" id="btn-close-logs" class="btn btn-ghost btn-sm">✕</button>
             </div>
           </div>
-          <pre id="logs-drawer-content" class="logs-drawer-pre">No WASM console output recorded yet.</pre>
+          <pre id="logs-drawer-content" class="logs-drawer-pre">No Game console output recorded yet.</pre>
         </div>
       </div>
     `;
@@ -762,7 +672,7 @@ export class PlaytestStudioUI {
     this.readyStateEl = this.viewportEl.querySelector('#viewport-ready-state') as HTMLElement;
     this.errorStateEl = this.viewportEl.querySelector('#viewport-error-state') as HTMLElement;
     this.gameStageEl = this.viewportEl.querySelector('#viewport-game-stage') as HTMLElement;
-    this.runnerMountEl = this.viewportEl.querySelector('#wasm-runner-mount') as HTMLElement;
+    this.runnerMountEl = this.viewportEl.querySelector('#game-runner-mount') as HTMLElement;
     this.annotationStageEl = this.viewportEl.querySelector('#annotation-stage') as HTMLElement;
     this.focusPillEl = this.viewportEl.querySelector('#focus-status-pill') as HTMLElement;
     this.keypadOverlayEl = this.viewportEl.querySelector('#virtual-keypad-overlay') as HTMLElement;
@@ -784,9 +694,9 @@ export class PlaytestStudioUI {
         id="btn-toggle-attach-logs"
         class="btn btn-ghost btn-icon btn-toggle active"
         data-tooltip-pos="top"
-        data-tooltip="Attach WASM Console Logs (ON)"
-        title="Attach Captured WASM Console / Stderr Logs (ON: Click to toggle)"
-        aria-label="Toggle attaching WASM console logs"
+        data-tooltip="Attach Game Console Logs (ON)"
+        title="Attach Captured Game Console Logs (ON: Click to toggle)"
+        aria-label="Toggle attaching Game console logs"
         aria-pressed="true"
       >
         <span>📋</span>
@@ -815,35 +725,9 @@ export class PlaytestStudioUI {
   }
 
   private bindEvents(): void {
-    // Synchronize unified project path input between Header and Ready screen
-    const headerWsInput = this.headerEl.querySelector('#workspace-input') as HTMLInputElement;
-    const readyWsInput = this.viewportEl.querySelector('#ready-workspace-input') as HTMLInputElement;
-
-    const syncWs = (val: string) => {
-      setWorkspacePath(val);
-      if (headerWsInput && headerWsInput.value !== val) headerWsInput.value = val;
-      if (readyWsInput && readyWsInput.value !== val) readyWsInput.value = val;
-      this.updateHeaderInputsUI();
-    };
-
-    headerWsInput?.addEventListener('change', () => syncWs(headerWsInput.value));
-    readyWsInput?.addEventListener('input', () => syncWs(readyWsInput.value));
-    readyWsInput?.addEventListener('keydown', (e: KeyboardEvent) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        syncWs(readyWsInput.value);
-        void this.handleBuildAndRun();
-      }
-    });
-
-    this.headerEl.querySelector('#btn-open-project')?.addEventListener('click', () => {
-      this.openProjectPicker();
-    });
-    this.headerEl.querySelector('#playtest-project-label')?.addEventListener('click', () => {
-      this.openProjectPicker();
-    });
-    this.viewportEl.querySelector('#btn-ready-open-project')?.addEventListener('click', () => {
-      this.openProjectPicker();
+    const address = this.viewportEl.querySelector<HTMLInputElement>('#playtest-url');
+    address?.addEventListener('keydown', event => {
+      if (event.key === 'Enter') void this.connectGame();
     });
 
     onWorkspaceChange(() => this.updateHeaderInputsUI());
@@ -851,19 +735,18 @@ export class PlaytestStudioUI {
 
     // Build & Run buttons
     this.headerEl.querySelector('#btn-build-run')?.addEventListener('click', () => {
-      void this.handleBuildAndRun();
+      void this.connectGame();
     });
 
     this.viewportEl.querySelector('#btn-ready-build')?.addEventListener('click', () => {
-      if (readyWsInput) syncWs(readyWsInput.value);
-      void this.handleBuildAndRun();
+      void this.connectGame();
     });
 
     this.viewportEl.querySelector('#btn-retry-build')?.addEventListener('click', () => {
-      void this.handleBuildAndRun();
+      void this.connectGame();
     });
 
-    // Send Build Error to Chat button
+    // Send Game Error to Chat button
     this.viewportEl.querySelector('#btn-send-build-error')?.addEventListener('click', () => {
       void this.handleSendBuildErrorToChat();
     });
@@ -1031,8 +914,8 @@ export class PlaytestStudioUI {
       attachLogsBtn.classList.toggle('active', nextChecked);
       attachLogsBtn.setAttribute('aria-pressed', String(nextChecked));
       const tip = nextChecked
-        ? 'Attach WASM Console Logs (ON)'
-        : 'Attach WASM Console Logs (OFF)';
+        ? 'Attach Game Console Logs (ON)'
+        : 'Attach Game Console Logs (OFF)';
       attachLogsBtn.setAttribute('data-tooltip', tip);
       attachLogsBtn.setAttribute('title', tip);
     });
@@ -1114,62 +997,32 @@ export class PlaytestStudioUI {
     );
   }
 
-  public async handleBuildAndRun(): Promise<void> {
-    if (this.isBuilding) {
+  public async connectGame(): Promise<void> {
+    if (this.isConnecting) {
       return;
     }
 
-    const workspace = getWorkspacePath().trim();
-    if (!workspace) {
-      StudioNotifier.error(
-        'Missing Go Workspace Path',
-        'Click "Open Project" in the header bar to select your Ebitengine Go project before building.'
-      );
-      this.openProjectPicker();
-      return;
-    }
-
-    this.isBuilding = true;
-    this.lastBuildFailure = null;
-    this.setBuildButtonsLoading(true);
+    this.isConnecting = true;
+    this.showReadyStateView();
+    this.annotator.resetHistory();
+    this.setConnectButtonsLoading(true);
 
     try {
-      StudioNotifier.info(`Compiling Go WASM in "${workspace}" (${this.activePkg || '.'})...`, 2500);
-      const result = await buildWasm({
-        workspace,
-        pkg: this.activePkg
-      });
-
-      if (!result.ok) {
-        this.lastBuildFailure = result;
-        this.showBuildErrorView(result);
-        StudioNotifier.error(
-          'Go WASM Compilation Failed (HTTP 422)',
-          result.compilerOutput.slice(0, 240)
-        );
-        return;
-      }
-
-      this.activePkg = result.pkg || '.';
-      this.updateHeaderInputsUI();
+      const address = this.viewportEl.querySelector<HTMLInputElement>('#playtest-url')!.value.trim();
       this.showActiveGameStage();
-      await this.runner.launchBuild(result.buildId);
+      await this.runner.connect(address);
 
       const pauseBtn = this.headerEl.querySelector('#btn-pause-toggle') as HTMLButtonElement | null;
       if (pauseBtn) {
         pauseBtn.disabled = false;
       }
 
-      const kbSize = (result.wasmBytes / (1024 * 1024)).toFixed(2);
-      StudioNotifier.success(
-        `Built & launched ${result.pkg} (${kbSize} MB WASM in ${result.durationMs}ms)`
-      );
       this.runner.focus();
     } catch (err: any) {
-      StudioNotifier.error('WASM Build / Launch Error', err?.message || String(err));
+      if (this.readyStateEl.classList.contains('hidden')) this.showPlaytestError(err?.message || String(err));
     } finally {
-      this.isBuilding = false;
-      this.setBuildButtonsLoading(false);
+      this.isConnecting = false;
+      this.setConnectButtonsLoading(false);
     }
   }
 
@@ -1188,15 +1041,8 @@ export class PlaytestStudioUI {
       this.annotationBarEl.classList.remove('hidden');
       this.annotationStageEl.classList.remove('hidden');
 
-      const liveCanvas = this.runner.getGameCanvas();
-      if (liveCanvas && liveCanvas.width > 0 && liveCanvas.height > 0) {
-        this.annotator.loadBaseFromCanvas(liveCanvas);
-      } else {
-        const latest = this.dvrBuffer.getLatestFrame();
-        if (latest) {
-          void this.annotator.loadBaseFrameDataUrl(latest.dataUrl, latest.width, latest.height);
-        }
-      }
+      const latest = this.dvrBuffer.getLatestFrame();
+      if (latest) void this.annotator.loadBaseFrameDataUrl(latest.dataUrl, latest.width, latest.height);
 
       this.activeDvrIndex = Math.max(0, this.dvrBuffer.length - 1);
       this.updateDvrScrubberUI();
@@ -1336,14 +1182,14 @@ export class PlaytestStudioUI {
     const pre = this.viewportEl.querySelector('#logs-drawer-content');
     if (pre) {
       pre.textContent =
-        logs.length > 0 ? logs.join('\n') : 'No WASM console output recorded yet.';
+        logs.length > 0 ? logs.join('\n') : 'No Game console output recorded yet.';
       pre.scrollTop = pre.scrollHeight;
     }
   }
 
   public showReadyStateView(): void {
     this.runner.destroy();
-    this.lastBuildFailure = null;
+    this.lastFailure = null;
     this.annotationBarEl.classList.add('hidden');
     this.annotationStageEl.classList.add('hidden');
     this.gameStageEl.classList.add('hidden');
@@ -1368,7 +1214,7 @@ export class PlaytestStudioUI {
     this.gameStageEl.classList.remove('hidden');
   }
 
-  private showBuildErrorView(failure: BuildWasmFailure): void {
+  private showErrorView(failure: PlaytestFailure): void {
     this.runner.destroy();
     this.annotationBarEl.classList.add('hidden');
     this.readyStateEl.classList.add('hidden');
@@ -1379,31 +1225,27 @@ export class PlaytestStudioUI {
     const metaEl = this.viewportEl.querySelector('#error-state-meta');
     const preEl = this.viewportEl.querySelector('#error-state-traceback');
 
-    if (titleEl) titleEl.textContent = failure.error || 'Go WASM Compilation Failed';
+    if (titleEl) titleEl.textContent = failure.error || 'Playtest connection failed';
     if (metaEl) {
-      metaEl.textContent = `Workspace: ${failure.workspace} | Package: ${failure.pkg} | Exit Code: ${failure.exitCode}`;
+      metaEl.textContent = `Workspace: ${failure.workspace}`;
     }
     if (preEl) {
-      preEl.textContent = failure.compilerOutput;
+      preEl.textContent = failure.detail;
     }
   }
 
-  private showRuntimePanicView(panicMessage: string): void {
+  private showPlaytestError(panicMessage: string): void {
     const ws = getWorkspacePath() || '.';
-    this.lastBuildFailure = {
-      ok: false,
-      status: 422,
-      error: 'Go WASM Runtime Panic',
-      compilerOutput: [panicMessage, '', ...this.runner.getConsoleLogs().slice(-30)].join('\n'),
-      workspace: ws,
-      pkg: this.activePkg,
-      exitCode: 2
+    this.lastFailure = {
+      error: 'Phaser playtest error',
+      detail: [panicMessage, '', ...this.runner.getConsoleLogs().slice(-30)].join('\n'),
+      workspace: ws
     };
-    this.showBuildErrorView(this.lastBuildFailure);
+    this.showErrorView(this.lastFailure);
   }
 
   private async handleSendBuildErrorToChat(): Promise<void> {
-    if (!this.lastBuildFailure) {
+    if (!this.lastFailure) {
       return;
     }
 
@@ -1417,15 +1259,14 @@ export class PlaytestStudioUI {
       const note = noteInput?.value.trim() || '';
 
       await sendBuildErrorToChat({
-        buildError: this.lastBuildFailure.compilerOutput,
+        buildError: this.lastFailure.detail,
         note,
-        workspace: this.lastBuildFailure.workspace,
-        pkg: this.lastBuildFailure.pkg
+        workspace: this.lastFailure.workspace
       });
 
-      StudioNotifier.success('Sent Go WASM compiler traceback directly to Antigravity chat!');
+      StudioNotifier.success('Sent game error directly to Antigravity chat!');
     } catch (err: any) {
-      StudioNotifier.error('Failed to send build error to chat', err?.message || String(err));
+      StudioNotifier.error('Failed to send playtest error to chat', err?.message || String(err));
     } finally {
       if (btn) btn.disabled = false;
     }
@@ -1434,27 +1275,10 @@ export class PlaytestStudioUI {
   private async ensurePausedFrameLoaded(): Promise<void> {
     if (this.runner.isRunning() && !this.runner.isPaused()) {
       this.runner.setPaused(true);
-    } else if (this.dvrBuffer.length === 0) {
-      this.runner.syncDvrFromChild();
-      this.activeDvrIndex = Math.max(0, this.dvrBuffer.length - 1);
-      this.updateDvrScrubberUI();
     }
-
-    if (!this.annotator.hasFrozenFrame()) {
-      const liveCanvas = this.runner.getGameCanvas();
-      if (liveCanvas && liveCanvas.width > 0 && liveCanvas.height > 0) {
-        this.annotator.loadBaseFromCanvas(liveCanvas);
-      } else {
-        const latest = this.dvrBuffer.getLatestFrame();
-        if (latest) {
-          if (latest.canvas) {
-            this.annotator.loadBaseFromCanvas(latest.canvas);
-          } else {
-            await this.annotator.loadBaseFrameDataUrl(latest.dataUrl, latest.width, latest.height);
-          }
-        }
-      }
-    }
+    const frame = this.dvrBuffer.getFrameAt(this.activeDvrIndex);
+    if (!this.runner.isRunning() || !frame) throw new Error('Connect to a game and capture a frame first.');
+    await this.annotator.loadBaseFrameDataUrl(frame.dataUrl, frame.width, frame.height);
   }
 
   private decodeDataUrlToImage(dataUrl: string): Promise<HTMLImageElement> {
@@ -1480,7 +1304,8 @@ export class PlaytestStudioUI {
       allFrames.length > 0
         ? Math.max(0, Math.min(allFrames.length - 1, this.activeDvrIndex))
         : 0;
-    const selectedFrames = allFrames.length > 0 ? allFrames.slice(0, endIdx + 1) : [];
+    const endTime = allFrames[endIdx]?.timestampMs ?? 0;
+    const selectedFrames = allFrames.slice(0, endIdx + 1).filter(frame => endTime - frame.timestampMs < 10_000);
 
     const baseDims = this.annotator.getDimensions();
     const srcWidth = selectedFrames[0]?.width || baseDims.width || 640;
@@ -1572,35 +1397,7 @@ export class PlaytestStudioUI {
       });
     }
 
-    // If no DVR frames were buffered yet, capture a single unannotated frame from the live game canvas
-    if (gifFrames.length === 0) {
-      const liveCanvas = this.runner.getGameCanvas();
-      ctx.fillStyle = '#090D16';
-      ctx.fillRect(0, 0, targetWidth, targetHeight);
-      if (liveCanvas && liveCanvas.width > 0 && liveCanvas.height > 0) {
-        const liveCtx = liveCanvas.getContext('2d');
-        if (liveCtx) {
-          const liveData = liveCtx.getImageData(0, 0, liveCanvas.width, liveCanvas.height);
-          crop = detectActiveViewportBounds(liveData.data, liveCanvas.width, liveCanvas.height);
-        }
-        ctx.drawImage(
-          liveCanvas,
-          crop.x,
-          crop.y,
-          crop.width,
-          crop.height,
-          0,
-          0,
-          targetWidth,
-          targetHeight
-        );
-      }
-      const fallbackData = ctx.getImageData(0, 0, targetWidth, targetHeight);
-      gifFrames.push({
-        rgba: new Uint8Array(fallbackData.data),
-        delayMs: 900
-      });
-    }
+    if (!gifFrames.length) throw new Error('No Phaser frames have been captured yet.');
 
     const gifBytes = encodeAnimatedGif({
       width: targetWidth,
@@ -1624,7 +1421,7 @@ export class PlaytestStudioUI {
   }
 
   private async handleSendGifToChat(): Promise<void> {
-    if (this.lastBuildFailure && !this.runner.isRunning()) {
+    if (this.lastFailure && !this.runner.isRunning()) {
       await this.handleSendBuildErrorToChat();
       return;
     }
@@ -1661,7 +1458,6 @@ export class PlaytestStudioUI {
         note,
         consoleLogs,
         workspace: getWorkspacePath() || '.',
-        pkg: this.activePkg,
         frameOffset: `${gifResult.frameCount}f (${gifResult.durationSec}s DVR → ${endOffset})`,
         resolution: `${gifResult.width}x${gifResult.height}`,
         width: gifResult.width,
@@ -1683,12 +1479,10 @@ export class PlaytestStudioUI {
   }
 
   private async handleSendBugToChat(): Promise<void> {
-    if (this.lastBuildFailure && !this.runner.isRunning()) {
+    if (this.lastFailure && !this.runner.isRunning()) {
       await this.handleSendBuildErrorToChat();
       return;
     }
-
-    await this.ensurePausedFrameLoaded();
 
     const sendBtn = this.bugBarEl.querySelector('#btn-send-bug-chat') as HTMLButtonElement | null;
     const gifBtn = this.bugBarEl.querySelector('#btn-send-gif-chat') as HTMLButtonElement | null;
@@ -1696,6 +1490,7 @@ export class PlaytestStudioUI {
     if (gifBtn) gifBtn.disabled = true;
 
     try {
+      await this.ensurePausedFrameLoaded();
       const noteInput = this.bugBarEl.querySelector('#bug-note-input') as HTMLInputElement | null;
       const includeLogsCheckbox = this.bugBarEl.querySelector(
         '#include-logs-checkbox'
@@ -1720,7 +1515,6 @@ export class PlaytestStudioUI {
         note,
         consoleLogs,
         workspace: getWorkspacePath() || '.',
-        pkg: this.activePkg,
         frameOffset,
         resolution: `${smartExport.width}x${smartExport.height}`,
         width: smartExport.width,
@@ -1739,7 +1533,7 @@ export class PlaytestStudioUI {
     }
   }
 
-  private setBuildButtonsLoading(loading: boolean): void {
+  private setConnectButtonsLoading(loading: boolean): void {
     const headerBtn = this.headerEl.querySelector('#btn-build-run') as HTMLButtonElement | null;
     const headerLabel = this.headerEl.querySelector('#build-btn-label');
     const readyBtn = this.viewportEl.querySelector('#btn-ready-build') as HTMLButtonElement | null;
@@ -1748,38 +1542,15 @@ export class PlaytestStudioUI {
     if (readyBtn) {
       readyBtn.disabled = loading;
       readyBtn.innerHTML = loading
-        ? '<span>⏳ Compiling &amp; Launching WASM...</span>'
-        : '<span>▶ Compile &amp; Launch Ebitengine WASM</span>';
+        ? '<span>⏳ Connecting...</span>'
+        : '<span>▶ Connect to game</span>';
     }
     if (headerLabel) {
-      headerLabel.textContent = loading ? '⏳ Building...' : '🚀 Run';
+      headerLabel.textContent = loading ? '⏳ Connecting...' : '🚀 Run';
     }
   }
 
   private updateHeaderInputsUI(): void {
-    const ws = getWorkspacePath();
-    const headerWsInput = this.headerEl.querySelector(
-      '#workspace-input'
-    ) as HTMLInputElement | null;
-    const readyWsInput = this.viewportEl.querySelector(
-      '#ready-workspace-input'
-    ) as HTMLInputElement | null;
-    if (headerWsInput && headerWsInput.value !== ws) {
-      headerWsInput.value = ws;
-    }
-    if (readyWsInput && readyWsInput.value !== ws) {
-      readyWsInput.value = ws;
-    }
-    const projectLabelEl = this.headerEl.querySelector(
-      '#playtest-project-label'
-    ) as HTMLElement | null;
-    if (projectLabelEl) {
-      projectLabelEl.textContent = this.formatProjectBadgeLabel(ws, this.activePkg);
-      const tip = ws
-        ? `${ws} (${this.activePkg || '.'}) — Click to switch project`
-        : 'Click to open a Go game project';
-      projectLabelEl.setAttribute('title', tip);
-    }
     const fullLink = this.headerEl.querySelector('#btn-full-studio') as HTMLAnchorElement | null;
     if (fullLink) {
       fullLink.href = getFullStudioUrl();

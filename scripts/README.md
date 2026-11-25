@@ -1,22 +1,9 @@
-# Helper Scripts
+# Development commands
 
-This folder contains environment check and runtime launcher scripts for this repository.
+Run `scripts/check_env.sh studio` for the panel runtime. Use `mcp` for the asset server, `phaser` for the web template, or `godot` for the native templates. Set `GODOT` to select an engine outside PATH.
 
-## `check_env.sh`
+Antigravity starts `node scripts/run-mcp.mjs` from the plugin installation. It builds the Go module with its declared dependencies and runs it over stdio. Asset paths supplied to the tools can be absolute.
 
-Checks that your local machine has the tools needed to build Ebitengine WASM games, compile the Go MCP server, and run Game Dev Studio:
+To connect a Phaser game to the panel, switch to its root, install dependencies with `npm ci` and run `node /path/to/agy-game-studio/scripts/playtest-phaser.mjs`. Use the printed local URL in the panel. Stop the Vite process after playtesting.
 
-```bash
-./scripts/check_env.sh
-./scripts/check_env.sh --help
-```
-
-* **Required**: `go` (1.26+), `wasm_exec.js` (in `GOROOT`), and `node`.
-* **Recommended (optional)**: [`godoctor`](https://github.com/danicat/godoctor) and [`kungfu`](https://github.com/danicat/kungfu).
-* **Gemini / Vertex AI Auth (optional)**: Checks whether credentials are configured for the `image_generate` (Nano Banana) and `music_generate` (Lyria) MCP tools, either via Vertex AI / Gemini Enterprise (`GOOGLE_GENAI_USE_ENTERPRISE` or `GOOGLE_GENAI_USE_VERTEXAI` with `GOOGLE_CLOUD_PROJECT`) or via Gemini Developer API (`GEMINI_API_KEY` or `GOOGLE_API_KEY`). Optional checks emit `WARN` rather than `FAIL`, so `./scripts/check_env.sh` still exits `0` when all required tools pass.
-
-## `run-mcp.mjs`
-
-Compiles the unified 10-tool Go engine MCP server (`mcp/`) on demand when Go sources change and runs it over stdio JSON-RPC. Configured automatically via `mcp_config.json`.
-
-In v0.4.0, duplicate per-skill `scripts/` directories inside `skills/` were removed in favor of this single Go MCP server. Removing those scripts eliminates Python and `uv` runtime dependencies across all 10 tools: procedural audio (`sound_presets`, `music_synthesize`, `music_validate`, `sfx_synthesize`), sprite processing (`sprite_inspect`, `sprite_compile`, `sprite_normalize`, `sprite_extract_palette`), and generative media (`image_generate`, `music_generate`).
+With the Phaser template demo and Studio running, test the actual game, pause control, annotation, PNG and GIF from the game root with `node /path/to/agy-game-studio/tests/phaser-playtest-smoke.mjs <studio-url> <game-url>`. The script uses the game's Playwright and intercepts outgoing reports locally. Install its Chromium browser or set `CHROMIUM_PATH` to a local executable.

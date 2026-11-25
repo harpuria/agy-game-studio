@@ -65,7 +65,8 @@ export default defineConfig({
   plugins: [
     {
       name: 'agy-game-studio-sidecar-preload',
-      transformIndexHtml(html) {
+      transformIndexHtml(html, context) {
+        if (context.server) return html;
         return html
           .replace(/\s+crossorigin(?:="[^"]*")?/g, '')
           .replace(/<script\s+type="module"\s+src="\/app\.js"><\/script>\s*/g, '')

@@ -1,15 +1,10 @@
 ---
 name: procedural-music
-description: >
-  Pure-code procedural music composition guide and .music DSL using the
-  game-studio MCP server. Uses sound_presets, music_validate, and
-  music_synthesize (SEGA Mega Drive YM2612 4-op FM + PolyBLEP SN76489 PSG or
-  macOS CoreAudio apple: true) to bake sample-exact 4-byte aligned 44.1 kHz
-  stereo .wav loops for //go:embed in Ebitengine.
+description: Compose and validate .music scores and synthesize WAV loops with the game-studio MCP server.
 license: Apache-2.0
 metadata:
   category: game-dev
-  tags: "bgm, music, ym2612, chiptune, synthesis, ebitengine"
+  tags: "bgm, music, ym2612, chiptune, synthesis"
   author: Daniela Petruzalek (daniela@danicat.dev)
   version: "0.4.0"
 ---
@@ -38,7 +33,6 @@ Compose original soundtracks with bespoke palettes instead of stamping templates
 | **`lyria`** | Choose `procedural-music` for sample-exact gapless `.wav` loops, tiny `5 KB` to `20 KB` `.music` source scores, and 1:1 channel stem mixing. Choose `lyria` (`music_generate`) for AI-generated orchestral, vocal, or recorded ambient soundtracks. |
 | **`procedural-sfx`** | Share one `44,100 Hz` `audio.Context` across `.music` loops and `.sfx` cues; keeping BGM bass below `260 Hz` leaves mid and high headroom for SFX. |
 | **`vibe-game-developer` & `game-design`** | Assign each scene state (title, stage, boss, fanfare, game over) its own tempo, mode, palette, and looped vs. one-off playback mode. |
-| **`ebitengineer`** | Embed baked `.wav` loops via `//go:embed` (`embed.FS`), decode at boot (never inside `Update()` or `Draw()`), and mask buffer lengths and `Seek()` offsets with `&^ 3`. |
 
 ---
 
@@ -58,7 +52,6 @@ Use these three `game-studio` MCP tools for preset inspection, theory validation
 
 - **Dual synthesis and soft-knee limiter**: Cumulative rational-time rounding (`int(math.Round(cursorSec * 44100))`) eliminates beat drift across `:16`, `:8t`, and `:4t` tuplets. A $C^1$-continuous soft limiter compresses multi-track peaks above `85%` full scale without hard clipping.
 - **Per-track stem isolation (`1:1` channel rule)**: Give each declared `inst` one dedicated `track` so `soloTracks`, `muteTracks`, and `outStemsPath` isolate every voice cleanly (`vol=0` mutes both melodic and drum channels).
-- **Mandatory 4-byte PCM alignment (`&^ 3`)**: Each `44.1 kHz` 16-bit little-endian stereo frame is `4` bytes (`176,400` bytes/sec). Mask buffer lengths and `Seek()` offsets with `&^ 3` (`aligned := len(pcm) &^ 3`) to prevent Ebitengine panics.
 
 ---
 
@@ -108,7 +101,7 @@ For short fanfares or game-over stingers, pass lower thresholds such as `"minCha
   "tool": "music_synthesize",
   "arguments": {
     "filePath": "assets/music/stage1.music",
-    "outWavPath": "internal/assets/music/stage1.wav"
+    "outWavPath": "assets/music/stage1.wav"
   }
 }
 ```
@@ -130,58 +123,6 @@ Review full voice-leading rules in [`references/music_theory_and_arranging.md`](
 
 ---
 
-## Baking, `//go:embed`, and sample-exact Ebitengine loops
+## Import into the game
 
-MP3 encoders insert priming and padding silence (`~1,152` samples) that creates audible pops at loop boundaries. Baking `.music` scores via `music_synthesize` to uncompressed `44.1 kHz` `.wav` files and embedding them via `//go:embed` gives sample-exact gapless loops on both desktop and WebAssembly with zero runtime synth code:
-
-```go
-package audio
-
-import (
-	"bytes"
-	_ "embed"
-	"fmt"
-	"io"
-
-	ebitaudio "github.com/hajimehoshi/ebiten/v2/audio"
-	"github.com/hajimehoshi/ebiten/v2/audio/wav"
-)
-
-//go:embed assets/music/stage1.wav
-var stage1WAV []byte
-
-type AudioBank struct {
-	audioCtx     *ebitaudio.Context
-	stage1Player *ebitaudio.Player
-}
-
-func NewAudioBank(audioCtx *ebitaudio.Context) (*AudioBank, error) {
-	if audioCtx == nil {
-		return nil, fmt.Errorf("audio: nil audio.Context")
-	}
-	stream, err := wav.DecodeWithSampleRate(audioCtx.SampleRate(), bytes.NewReader(stage1WAV))
-	if err != nil {
-		return nil, fmt.Errorf("audio: decode stage1.wav: %w", err)
-	}
-	pcm, err := io.ReadAll(stream)
-	if err != nil {
-		return nil, fmt.Errorf("audio: read stage1.wav PCM: %w", err)
-	}
-	// Enforce mandatory 4-byte frame alignment (&^ 3)
-	alignedLen := int64(len(pcm)) &^ 3
-	if alignedLen < 4 {
-		return nil, fmt.Errorf("audio: stage1.wav produced empty aligned PCM")
-	}
-	loopStream := ebitaudio.NewInfiniteLoop(bytes.NewReader(pcm[:alignedLen]), alignedLen)
-	player, err := audioCtx.NewPlayer(loopStream)
-	if err != nil {
-		return nil, fmt.Errorf("audio: create stage1 player: %w", err)
-	}
-	return &AudioBank{
-		audioCtx:     audioCtx,
-		stage1Player: player,
-	}, nil
-}
-```
-
-- Pause and rewind (`player.Pause()`, `player.Rewind()`) or step `player.SetVolume()` smoothly across scene transitions, and share the same `audio.Context` with `procedural-sfx` (`PlaySFX` cooldowns `30ms` to `60ms`).
+Choose output paths in the game's asset directory. For Phaser, follow [phaser-web](../phaser-web/SKILL.md) and register the exported file in the game's preload list. For Godot, follow [godot-game](../godot-game/SKILL.md) and confirm the imported resource in the target scene.
