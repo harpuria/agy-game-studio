@@ -23,6 +23,7 @@ import (
 	"math"
 	"math/rand/v2"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -2246,6 +2247,9 @@ func ExportWAV(filename string, pcm []byte) (retErr error) {
 	}
 	pcm = pcm[:alignedLen]
 
+	if err := os.MkdirAll(filepath.Dir(filename), 0o755); err != nil {
+		return fmt.Errorf("create WAV directory: %w", err)
+	}
 	f, err := os.Create(filename)
 	if err != nil {
 		return err

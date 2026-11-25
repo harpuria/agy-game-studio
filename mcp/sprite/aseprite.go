@@ -134,6 +134,9 @@ func ExportAseprite(path string, cs *CompiledSprite) error {
 	out.Write(hdr[:])
 	out.Write(framesBuf.Bytes())
 
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("create aseprite directory: %w", err)
+	}
 	if err := os.WriteFile(path, out.Bytes(), 0o644); err != nil {
 		return fmt.Errorf("write aseprite file %q: %w", path, err)
 	}
@@ -1031,6 +1034,9 @@ func ExportPNGSheet(pngPath, jsonPath string, cs *CompiledSprite) error {
 		jb, err := json.MarshalIndent(manifest, "", "  ")
 		if err != nil {
 			return fmt.Errorf("marshal sprite sheet JSON: %w", err)
+		}
+		if err := os.MkdirAll(filepath.Dir(jsonPath), 0o755); err != nil {
+			return fmt.Errorf("create JSON manifest directory: %w", err)
 		}
 		if err := os.WriteFile(jsonPath, jb, 0o644); err != nil {
 			return fmt.Errorf("write JSON manifest %q: %w", jsonPath, err)

@@ -52,7 +52,7 @@
   "arguments": {
     "prompt": "An energetic 8-bit chiptune arcade melody at 140 BPM in C major. Instrumental only, no vocals.",
     "model": "lyria-3-clip-preview",
-    "outPath": "chiptune.mp3"
+    "outPath": "<GAME_ROOT>/public/assets/audio/chiptune.mp3"
   }
 }
 ```

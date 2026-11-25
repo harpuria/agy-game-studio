@@ -93,7 +93,7 @@ Control reasoning depth with `thinking_level`:
   "tool": "image_generate",
   "arguments": {
     "prompt": "A cinematic wide-angle shot of an ancient observatory on a mountain peak under the Aurora Borealis",
-    "outPath": "observatory_4k.png",
+    "outPath": "<GAME_ROOT>/art/raw/observatory_4k.png",
     "model": "nano-banana-2",
     "resolution": "4K",
     "aspectRatio": "16:9",

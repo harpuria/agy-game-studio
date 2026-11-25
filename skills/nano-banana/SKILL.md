@@ -92,7 +92,7 @@ Consult the model cards in `references/` for complete resolution grids, token bu
   "tool": "image_generate",
   "arguments": {
     "prompt": "A seamless 2D side-scrolling pixel-art parallax background of a synthwave city skyline at dusk, clean horizon",
-    "outPath": "assets/backgrounds/synthwave_parallax.png",
+    "outPath": "<GAME_ROOT>/public/assets/backgrounds/synthwave_parallax.png",
     "model": "nano-banana-2.1",
     "resolution": "2K",
     "aspectRatio": "4:1",
@@ -108,7 +108,7 @@ Consult the model cards in `references/` for complete resolution grids, token bu
   "tool": "image_generate",
   "arguments": {
     "prompt": "A minimalist flat illustration of a ruby potion bottle icon on a dark UI card",
-    "outPath": "assets/ui/potion_icon.png",
+    "outPath": "<GAME_ROOT>/public/assets/ui/potion_icon.png",
     "model": "nano-banana-2-lite",
     "aspectRatio": "1:1",
     "enterprise": true,
@@ -130,8 +130,8 @@ Splitting character design from animation grid generation keeps proportions and 
   "tool": "image_generate",
   "arguments": {
     "prompt": "Keep the exact character proportions and color swatches from the reference sheet. Uniform 4x4 sprite sheet grid in 2D side-profile facing right on a flat unlit #00FF00 background, no grid lines or labels, at least 15% empty #00FF00 margin inside every cell. Row 1: idle. Row 2: walk. Row 3: run. Row 4: 4-phase jump arc (crouch anticipation, launch, rising ascent, mid-air apex).",
-    "inputImages": ["assets/raw/character_sheet.png"],
-    "outPath": "assets/raw/raw_grid_part1.png",
+    "inputImages": ["<GAME_ROOT>/art/raw/character_sheet.png"],
+    "outPath": "<GAME_ROOT>/art/raw/raw_grid_part1.png",
     "model": "nano-banana-2.1",
     "resolution": "2K",
     "aspectRatio": "1:1",
@@ -144,9 +144,11 @@ Splitting character design from animation grid generation keeps proportions and 
 
 ---
 
-## Import into the game
+## Paths and import into the game
 
-Choose output paths in the game's asset directory. For Phaser, follow [phaser-web](../phaser-web/SKILL.md) and register the exported file in the game's preload list. For Godot, follow [godot-game](../godot-game/SKILL.md) and confirm the imported resource in the target scene.
+Every path passed to the `game-studio` tools must be absolute; the tools reject relative paths. In the examples, replace `<GAME_ROOT>` with the game repository's absolute root. Files the game loads go under `public/assets/` (Phaser) or `game/assets/` (Godot); raw generations, previews and DSL sources go under `<GAME_ROOT>/art/` so they never ship. See the folder layout in [vibe-game-developer](../vibe-game-developer/SKILL.md#asset-folders-and-paths) and record each finished file in the GDD asset manifest.
+
+For Phaser, follow [phaser-web](../phaser-web/SKILL.md) and register the exported file in the game's preload list. For Godot, follow [godot-game](../godot-game/SKILL.md) and confirm the imported resource in the target scene.
 
 
 ## Prompting best practices

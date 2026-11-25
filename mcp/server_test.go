@@ -180,7 +180,7 @@ func TestMCPServerDiscoveryAndTools(t *testing.T) {
 	sfxRes, err := session.CallTool(ctx, &mcp.CallToolParams{
 		Name: "sfx_synthesize",
 		Arguments: map[string]any{
-			"filePath":   filepath.Join("..", "tests", "fixtures", "sfx", "laser_arcade.sfx"),
+			"filePath":   fixturePath(t, "tests", "fixtures", "sfx", "laser_arcade.sfx"),
 			"outWavPath": sfxWav,
 		},
 	})
@@ -248,7 +248,7 @@ track ch2 bass: C2:4 C2:4 G1:4 G1:4
 	valRes, err := session.CallTool(ctx, &mcp.CallToolParams{
 		Name: "music_validate",
 		Arguments: map[string]any{
-			"filePath": filepath.Join("..", "tests", "fixtures", "music", "battle_theme.music"),
+			"filePath": fixturePath(t, "tests", "fixtures", "music", "battle_theme.music"),
 		},
 	})
 	if err != nil {
@@ -264,7 +264,7 @@ track ch2 bass: C2:4 C2:4 G1:4 G1:4
 	inspRes, err := session.CallTool(ctx, &mcp.CallToolParams{
 		Name: "sprite_inspect",
 		Arguments: map[string]any{
-			"filePath":   filepath.Join("..", "tests", "fixtures", "sprite", "black_cat_anime.aseprite"),
+			"filePath":   fixturePath(t, "tests", "fixtures", "sprite", "black_cat_anime.aseprite"),
 			"outPngPath": inspPng,
 		},
 	})
@@ -284,7 +284,7 @@ track ch2 bass: C2:4 C2:4 G1:4 G1:4
 	compRes, err := session.CallTool(ctx, &mcp.CallToolParams{
 		Name: "sprite_compile",
 		Arguments: map[string]any{
-			"filePath":   filepath.Join("..", "tests", "fixtures", "sprite", "black_cat_anime.sprite"),
+			"filePath":   fixturePath(t, "tests", "fixtures", "sprite", "black_cat_anime.sprite"),
 			"outPngPath": compPng,
 		},
 	})
@@ -304,7 +304,7 @@ track ch2 bass: C2:4 C2:4 G1:4 G1:4
 	normRes, err := session.CallTool(ctx, &mcp.CallToolParams{
 		Name: "sprite_normalize",
 		Arguments: map[string]any{
-			"filePath":   filepath.Join("..", "tests", "fixtures", "sprite", "black_cat_anime.png"),
+			"filePath":   fixturePath(t, "tests", "fixtures", "sprite", "black_cat_anime.png"),
 			"cols":       4,
 			"rows":       8,
 			"outPngPath": normPng,
@@ -325,7 +325,7 @@ track ch2 bass: C2:4 C2:4 G1:4 G1:4
 	palRes, err := session.CallTool(ctx, &mcp.CallToolParams{
 		Name: "sprite_extract_palette",
 		Arguments: map[string]any{
-			"filePath": filepath.Join("..", "tests", "fixtures", "sprite", "black_cat_anime.png"),
+			"filePath": fixturePath(t, "tests", "fixtures", "sprite", "black_cat_anime.png"),
 			"numRamps": 4,
 		},
 	})
@@ -517,5 +517,47 @@ track ch2 bass: C2:4 C2:4 G1:4 G1:4
 	musReport := decodeStructured[map[string]any](t, musCallRes)
 	if musReport["format"] != "mp3" || musReport["bytesWritten"] != float64(len(mp3Data)) {
 		t.Fatalf("unexpected music report: %+v", musReport)
+	}
+}
+
+// fixturePath returns an absolute path under the plugin root; tools reject relative paths.
+func fixturePath(t *testing.T, parts ...string) string {
+	t.Helper()
+	abs, err := filepath.Abs(filepath.Join(append([]string{".."}, parts...)...))
+	if err != nil {
+		t.Fatalf("resolve fixture path: %v", err)
+	}
+	return abs
+}
+
+func TestToolsRejectRelativePaths(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+	}{
+		{"outWavPath", requireAbsolutePaths(pathArg{"outWavPath", "assets/sfx/jump.wav"})},
+		{"inputImages[1]", requireAbsolutePaths(listArgs("inputImages", []string{"/abs/ref.png", "raw/ref.png"})...)},
+	}
+	for _, c := range cases {
+		if c.err == nil || !strings.Contains(c.err.Error(), c.name+" must be an absolute path") {
+			t.Errorf("expected %s to be rejected, got %v", c.name, c.err)
+		}
+	}
+	if err := requireAbsolutePaths(pathArg{"outPath", "/tmp/game/public/assets/hero.png"}, pathArg{"jsonPath", ""}); err != nil {
+		t.Errorf("absolute and empty paths must pass, got %v", err)
+	}
+}
+
+func TestSFXSynthesizeCreatesOutputFolders(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "public", "assets", "audio", "ui.wav")
+	_, rep, err := handleSFXSynthesize(context.Background(), nil, SFXSynthesizeInput{
+		DSL:        "title \"ui\"\ntype sfx\nstep preset=ui_select dur=80ms\n",
+		OutWavPath: out,
+	})
+	if err != nil || !rep.Passed {
+		t.Fatalf("sfx_synthesize failed: err=%v issues=%v", err, rep.Issues)
+	}
+	if _, statErr := os.Stat(out); statErr != nil {
+		t.Fatalf("expected WAV in a new folder: %v", statErr)
 	}
 }

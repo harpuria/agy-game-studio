@@ -79,13 +79,13 @@ track ch03 drums: p_drums*2
 ```
 
 1. **Discover palettes**: Call `sound_presets` to view all `waveTypes`, `ym2612Presets`, and `tempoMarkings`.
-2. **Validate theory and duration**: Save your score (for example `assets/music/stage1.music`) and call `music_validate`:
+2. **Validate theory and duration**: Save your score (for example `<GAME_ROOT>/art/music/stage1.music`) and call `music_validate`:
 
 ```json
 {
   "tool": "music_validate",
   "arguments": {
-    "filePath": "assets/music/stage1.music",
+    "filePath": "<GAME_ROOT>/art/music/stage1.music",
     "minChannels": 8,
     "minDurationSec": 30
   }
@@ -100,8 +100,8 @@ For short fanfares or game-over stingers, pass lower thresholds such as `"minCha
 {
   "tool": "music_synthesize",
   "arguments": {
-    "filePath": "assets/music/stage1.music",
-    "outWavPath": "assets/music/stage1.wav"
+    "filePath": "<GAME_ROOT>/art/music/stage1.music",
+    "outWavPath": "<GAME_ROOT>/public/assets/audio/stage1.wav"
   }
 }
 ```
@@ -123,6 +123,8 @@ Review full voice-leading rules in [`references/music_theory_and_arranging.md`](
 
 ---
 
-## Import into the game
+## Paths and import into the game
 
-Choose output paths in the game's asset directory. For Phaser, follow [phaser-web](../phaser-web/SKILL.md) and register the exported file in the game's preload list. For Godot, follow [godot-game](../godot-game/SKILL.md) and confirm the imported resource in the target scene.
+Every path passed to the `game-studio` tools must be absolute; the tools reject relative paths. In the examples, replace `<GAME_ROOT>` with the game repository's absolute root. Files the game loads go under `public/assets/` (Phaser) or `game/assets/` (Godot); raw generations, previews and DSL sources go under `<GAME_ROOT>/art/` so they never ship. See the folder layout in [vibe-game-developer](../vibe-game-developer/SKILL.md#asset-folders-and-paths) and record each finished file in the GDD asset manifest.
+
+For Phaser, follow [phaser-web](../phaser-web/SKILL.md) and register the exported file in the game's preload list. For Godot, follow [godot-game](../godot-game/SKILL.md) and confirm the imported resource in the target scene.

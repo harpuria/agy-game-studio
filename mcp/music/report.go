@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 )
@@ -114,6 +115,9 @@ func SynthesizeScoreStemsWithOptions(score *Score, useApple bool) ([]byte, [][]b
 
 // ExportStemsBinary writes all rendered per-track 16-bit 44.1kHz stereo PCM stems into a single framed binary file.
 func ExportStemsBinary(filename string, tracks []Track, trackPCMs [][]byte) (retErr error) {
+	if err := os.MkdirAll(filepath.Dir(filename), 0o755); err != nil {
+		return fmt.Errorf("create stems directory: %w", err)
+	}
 	f, err := os.Create(filename)
 	if err != nil {
 		return err

@@ -83,7 +83,7 @@ Pass YouTube URLs or MP4 files to synthesize keyframe illustrations, sprite shee
   "tool": "image_generate",
   "arguments": {
     "prompt": "A seamless 2D side-scrolling pixel-art parallax background of a bioluminescent crystal cavern",
-    "outPath": "cavern_parallax_4k.png",
+    "outPath": "<GAME_ROOT>/art/raw/cavern_parallax_4k.png",
     "model": "nano-banana-2.1",
     "resolution": "4K",
     "aspectRatio": "4:1",
@@ -99,8 +99,8 @@ Pass YouTube URLs or MP4 files to synthesize keyframe illustrations, sprite shee
   "tool": "image_generate",
   "arguments": {
     "prompt": "Keep the exact character identity, proportions, and 4-step color swatches from the reference sheet. Generate a uniform 4x4 sprite sheet grid (4 rows, 4 columns) on a flat unlit #00FF00 background with at least 15% empty #00FF00 margin inside every cell, no grid lines, and no text labels. Row 1: idle. Row 2: walk. Row 3: run. Row 4: 4-phase jump arc including mid-air apex pose.",
-    "inputImages": ["character_sheet.png"],
-    "outPath": "raw_grid_part1.png",
+    "inputImages": ["<GAME_ROOT>/art/raw/character_sheet.png"],
+    "outPath": "<GAME_ROOT>/art/raw/raw_grid_part1.png",
     "model": "nano-banana-2.1",
     "resolution": "2K",
     "aspectRatio": "1:1",

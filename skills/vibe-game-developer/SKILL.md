@@ -110,7 +110,20 @@ flowchart TD
 
 ## Asset pipeline decision rules
 
-Follow the pipeline recorded in `GDD.md`, or align with the user first. Only produce assets that the current milestone actually uses—avoid speculative asset batches. Always resolve MCP input and output paths from the game repository root and pass **absolute paths** to `game-studio` MCP tools.
+Follow the pipeline and the asset manifest recorded in `GDD.md`, or align with the user first. Only produce assets that the current milestone actually uses—avoid speculative asset batches.
+
+### Asset folders and paths
+
+The `game-studio` tools reject relative paths: the server runs from the plugin folder, so a relative path would land in the plugin installation instead of the game. Resolve the game repository root (`<GAME_ROOT>` in skill examples) and pass absolute paths.
+
+| Kind | Phaser Web | Godot Mobile / PC |
+| :--- | :--- | :--- |
+| Sprite sheets the game loads (`.png` + `.json`) | `<GAME_ROOT>/public/assets/sprites/` | `<GAME_ROOT>/game/assets/sprites/` |
+| Backgrounds, UI images | `<GAME_ROOT>/public/assets/backgrounds/`, `…/ui/` | `<GAME_ROOT>/game/assets/backgrounds/`, `…/ui/` |
+| SFX and music the game plays | `<GAME_ROOT>/public/assets/audio/` | `<GAME_ROOT>/game/assets/audio/` |
+| Raw AI generations, style references, previews, GIFs, `.aseprite`, `.sprite`/`.sfx`/`.music` sources, lyrics | `<GAME_ROOT>/art/` (`raw/`, `references/`, `previews/`, `sprites/`, `sfx/`, `music/`) | same, plus an empty `<GAME_ROOT>/art/.gdignore` so Godot neither imports nor exports it |
+
+Keep `art/` in version control so assets can be regenerated, and keep everything under `public/assets/` or `game/assets/` limited to files the game actually loads.
 
 ### Sprites, visuals, and runtime VFX
 

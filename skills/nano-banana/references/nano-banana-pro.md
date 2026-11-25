@@ -72,11 +72,11 @@ Can produce multi-panel graphic novels, children's book spreads, or technical st
   "arguments": {
     "prompt": "Render the character from images 1 and 2 wearing a leather flight jacket and aviator goggles, standing beside a vintage plane. Recreate the entire scene in the exact watercolor and ink style of image 3.",
     "inputImages": [
-      "references/character_face.png",
-      "references/character_body.png",
-      "references/art_style.png"
+      "<GAME_ROOT>/art/references/character_face.png",
+      "<GAME_ROOT>/art/references/character_body.png",
+      "<GAME_ROOT>/art/references/art_style.png"
     ],
-    "outPath": "character_rendered.png",
+    "outPath": "<GAME_ROOT>/art/raw/character_rendered.png",
     "model": "nano-banana-pro",
     "resolution": "2K",
     "aspectRatio": "3:2"

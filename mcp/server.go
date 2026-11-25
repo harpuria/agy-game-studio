@@ -16,6 +16,8 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/danicat/agy-game-studio/mcp/media"
@@ -206,6 +208,37 @@ func NewServer() *mcp.Server {
 	return server
 }
 
+// pathArg names one path argument of a tool call for requireAbsolutePaths.
+type pathArg struct {
+	name  string
+	value string
+}
+
+// requireAbsolutePaths rejects relative file arguments. The server's working directory is
+// the plugin folder, not the game, so a relative path would read from or write into the
+// plugin installation instead of the game repository.
+func requireAbsolutePaths(args ...pathArg) error {
+	for _, arg := range args {
+		value := strings.TrimSpace(arg.value)
+		if value == "" || filepath.IsAbs(value) {
+			continue
+		}
+		return fmt.Errorf(
+			"%s must be an absolute path, got %q. Relative paths resolve against the MCP server's folder, not the game. "+
+				"Join it to the game's root folder, for example /Users/you/games/my-game/%s",
+			arg.name, arg.value, strings.TrimPrefix(filepath.ToSlash(value), "./"))
+	}
+	return nil
+}
+
+func listArgs(name string, values []string) []pathArg {
+	out := make([]pathArg, 0, len(values))
+	for i, v := range values {
+		out = append(out, pathArg{fmt.Sprintf("%s[%d]", name, i), v})
+	}
+	return out
+}
+
 func handleSoundPresets(_ context.Context, _ *mcp.CallToolRequest, _ SoundPresetsInput) (*mcp.CallToolResult, SoundPresetsOutput, error) {
 	sfxCatalog := sfx.BuildPresetsCatalog()
 	if sfxCatalog == nil {
@@ -218,6 +251,9 @@ func handleSoundPresets(_ context.Context, _ *mcp.CallToolRequest, _ SoundPreset
 }
 
 func handleMusicSynthesize(_ context.Context, _ *mcp.CallToolRequest, in MusicSynthesizeInput) (*mcp.CallToolResult, music.SynthReport, error) {
+	if err := requireAbsolutePaths(pathArg{"filePath", in.FilePath}, pathArg{"outWavPath", in.OutWavPath}, pathArg{"outStemsPath", in.OutStemsPath}); err != nil {
+		return nil, music.SynthReport{}, err
+	}
 	rep := music.Synthesize(music.SynthesizeOptions{
 		DSL:          in.DSL,
 		FilePath:     in.FilePath,
@@ -231,11 +267,17 @@ func handleMusicSynthesize(_ context.Context, _ *mcp.CallToolRequest, in MusicSy
 }
 
 func handleMusicValidate(_ context.Context, _ *mcp.CallToolRequest, in MusicValidateInput) (*mcp.CallToolResult, music.ValidateReport, error) {
+	if err := requireAbsolutePaths(pathArg{"filePath", in.FilePath}); err != nil {
+		return nil, music.ValidateReport{}, err
+	}
 	rep := music.Validate(in.DSL, in.FilePath, in.MinChannels, in.MinDurationSec)
 	return nil, rep, nil
 }
 
 func handleSFXSynthesize(_ context.Context, _ *mcp.CallToolRequest, in SFXSynthesizeInput) (*mcp.CallToolResult, sfx.SynthReport, error) {
+	if err := requireAbsolutePaths(pathArg{"filePath", in.FilePath}, pathArg{"outWavPath", in.OutWavPath}); err != nil {
+		return nil, sfx.SynthReport{}, err
+	}
 	rep := sfx.Synthesize(sfx.SynthesizeOptions{
 		DSL:        in.DSL,
 		FilePath:   in.FilePath,
@@ -245,6 +287,9 @@ func handleSFXSynthesize(_ context.Context, _ *mcp.CallToolRequest, in SFXSynthe
 }
 
 func handleSpriteInspect(_ context.Context, _ *mcp.CallToolRequest, in SpriteInspectInput) (*mcp.CallToolResult, sprite.SynthReport, error) {
+	if err := requireAbsolutePaths(pathArg{"filePath", in.FilePath}, pathArg{"jsonPath", in.JsonPath}, pathArg{"outPngPath", in.OutPngPath}); err != nil {
+		return nil, sprite.SynthReport{}, err
+	}
 	rep, err := sprite.Inspect(sprite.InspectOptions{
 		FilePath:    in.FilePath,
 		FrameWidth:  in.FrameWidth,
@@ -261,6 +306,9 @@ func handleSpriteInspect(_ context.Context, _ *mcp.CallToolRequest, in SpriteIns
 }
 
 func handleSpriteCompile(_ context.Context, _ *mcp.CallToolRequest, in SpriteCompileInput) (*mcp.CallToolResult, sprite.SynthReport, error) {
+	if err := requireAbsolutePaths(pathArg{"filePath", in.FilePath}, pathArg{"baseDir", in.BaseDir}, pathArg{"outPngPath", in.OutPngPath}, pathArg{"outJsonPath", in.OutJsonPath}, pathArg{"outAsepritePath", in.OutAsepritePath}, pathArg{"outPreviewPath", in.OutPreviewPath}, pathArg{"outGifDir", in.OutGifDir}); err != nil {
+		return nil, sprite.SynthReport{}, err
+	}
 	rep, err := sprite.Compile(sprite.CompileOptions{
 		DSL:             in.DSL,
 		FilePath:        in.FilePath,
@@ -280,6 +328,9 @@ func handleSpriteCompile(_ context.Context, _ *mcp.CallToolRequest, in SpriteCom
 }
 
 func handleSpriteNormalize(_ context.Context, _ *mcp.CallToolRequest, in SpriteNormalizeInput) (*mcp.CallToolResult, sprite.SynthReport, error) {
+	if err := requireAbsolutePaths(append(listArgs("filePaths", in.FilePaths), pathArg{"filePath", in.FilePath}, pathArg{"outPngPath", in.OutPngPath}, pathArg{"outJsonPath", in.OutJsonPath}, pathArg{"outSpritePath", in.OutSpritePath}, pathArg{"outAsepritePath", in.OutAsepritePath}, pathArg{"outPreviewPath", in.OutPreviewPath}, pathArg{"outGifDir", in.OutGifDir})...); err != nil {
+		return nil, sprite.SynthReport{}, err
+	}
 	filePaths := make([]string, 0, len(in.FilePaths)+1)
 	for _, p := range in.FilePaths {
 		if trimmed := strings.TrimSpace(p); trimmed != "" {
@@ -341,6 +392,9 @@ func handleSpriteNormalize(_ context.Context, _ *mcp.CallToolRequest, in SpriteN
 }
 
 func handleSpriteExtractPalette(_ context.Context, _ *mcp.CallToolRequest, in SpriteExtractPaletteInput) (*mcp.CallToolResult, sprite.PaletteReport, error) {
+	if err := requireAbsolutePaths(pathArg{"filePath", in.FilePath}); err != nil {
+		return nil, sprite.PaletteReport{}, err
+	}
 	rep, err := sprite.ExtractPalette(in.FilePath, in.NumRamps)
 	if err != nil {
 		return nil, sprite.PaletteReport{}, err
@@ -349,6 +403,9 @@ func handleSpriteExtractPalette(_ context.Context, _ *mcp.CallToolRequest, in Sp
 }
 
 func handleImageGenerate(ctx context.Context, _ *mcp.CallToolRequest, in ImageGenerateInput) (*mcp.CallToolResult, media.ImageGenerateReport, error) {
+	if err := requireAbsolutePaths(append(listArgs("inputImages", in.InputImages), pathArg{"outPath", in.OutPath})...); err != nil {
+		return nil, media.ImageGenerateReport{GroundingSources: make([]string, 0)}, err
+	}
 	rep, err := media.GenerateImage(ctx, media.ImageOptions{
 		Prompt:        in.Prompt,
 		Model:         in.Model,
@@ -373,6 +430,9 @@ func handleImageGenerate(ctx context.Context, _ *mcp.CallToolRequest, in ImageGe
 }
 
 func handleMusicGenerate(ctx context.Context, _ *mcp.CallToolRequest, in MusicGenerateInput) (*mcp.CallToolResult, media.MusicGenerateReport, error) {
+	if err := requireAbsolutePaths(append(listArgs("inputImages", in.InputImages), pathArg{"outPath", in.OutPath}, pathArg{"outLyricsPath", in.OutLyricsPath})...); err != nil {
+		return nil, media.MusicGenerateReport{}, err
+	}
 	rep, err := media.GenerateMusic(ctx, media.MusicOptions{
 		Prompt:        in.Prompt,
 		Model:         in.Model,
